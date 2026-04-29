@@ -50,6 +50,26 @@ class BoundaryControls:
     table: QTableWidget
 
 
+
+
+@dataclass(slots=True)
+class MuSControls:
+    wavelength: QSpinBox
+    focus_position: QSpinBox
+    omega: QSlider
+    load_images: QPushButton
+    show_image: QPushButton
+    prev_image: QPushButton
+    next_image: QPushButton
+    focus_line: QPushButton
+    table: QTableWidget
+
+
+@dataclass(slots=True)
+class AverageControls:
+    refresh_table: QPushButton
+    plot: QPushButton
+    table: QTableWidget
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -70,8 +90,8 @@ class MainWindow(QMainWindow):
     def _build_tabs(self) -> None:
         self.tabs.addTab(self._build_roi_tab(), "ROI")
         self.tabs.addTab(self._build_boundary_tab(), "Boundary calculation")
-        self.tabs.addTab(self._placeholder_tab("Mu_s calculation"), "Mu_s calculation")
-        self.tabs.addTab(self._placeholder_tab("Average intensity calculation"), "Average intensity calculation")
+        self.tabs.addTab(self._build_mu_s_tab(), "Mu_s calculation")
+        self.tabs.addTab(self._build_average_tab(), "Average intensity calculation")
         self.tabs.addTab(self._placeholder_tab("Graphs drawing"), "Graphs drawing")
         self.tabs.addTab(self._placeholder_tab("Save CSV"), "Save CSV")
         self.tabs.addTab(self._placeholder_tab("Processing photos"), "Processing photos")
@@ -205,6 +225,78 @@ class MainWindow(QMainWindow):
             self.boundary.table.setItem(i, 4, QTableWidgetItem(""))
             self.boundary.table.setItem(i, 5, QTableWidgetItem(""))
             self.boundary.table.setItem(i, 6, QTableWidgetItem(""))
+
+
+    def _build_mu_s_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        top = QHBoxLayout()
+        wavelength = QSpinBox()
+        wavelength.setRange(1, 100000)
+        wavelength.setValue(int(INPUT_DEFAULTS.wavelength))
+        focus_position = QSpinBox()
+        focus_position.setRange(-100000, 100000)
+        focus_position.setValue(int(INPUT_DEFAULTS.focus_position))
+        omega = self._make_slider(0, 1000)
+        omega.setValue(int(INPUT_DEFAULTS.omega * 100))
+
+        top.addWidget(QLabel("Wavelength, nm"))
+        top.addWidget(wavelength)
+        top.addWidget(QLabel("Focus position in air, pixel"))
+        top.addWidget(focus_position)
+        top.addWidget(QLabel("Omega x100"))
+        top.addWidget(omega)
+
+        img_actions = QHBoxLayout()
+        load_images = QPushButton("Load images")
+        show_image = QPushButton("Show")
+        prev_image = QPushButton("Previous image")
+        next_image = QPushButton("Next image")
+        focus_line = QPushButton("Focus line")
+        for b in (load_images, show_image, prev_image, next_image, focus_line):
+            img_actions.addWidget(b)
+        img_actions.addStretch(1)
+
+        table = QTableWidget(0, 3)
+        table.setHorizontalHeaderLabels(["N", "mu_s 1/mm", "mu_s (std) 1/mm"])
+
+        plot_placeholder = QTextEdit()
+        plot_placeholder.setReadOnly(True)
+        plot_placeholder.setPlaceholderText("Mu_s plot area (Qt plot binding step)")
+
+        layout.addLayout(top)
+        layout.addLayout(img_actions)
+        layout.addWidget(table, 1)
+        layout.addWidget(plot_placeholder, 1)
+
+        self.mu_s = MuSControls(wavelength, focus_position, omega, load_images, show_image, prev_image, next_image, focus_line, table)
+        return tab
+
+    def _build_average_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        actions = QHBoxLayout()
+        refresh_table = QPushButton("Refresh table")
+        plot = QPushButton("Plot")
+        actions.addWidget(refresh_table)
+        actions.addWidget(plot)
+        actions.addStretch(1)
+
+        table = QTableWidget(0, 3)
+        table.setHorizontalHeaderLabels(["N", "Av int (med), pixel value", "Av int (std), pixel value"])
+
+        plot_placeholder = QTextEdit()
+        plot_placeholder.setReadOnly(True)
+        plot_placeholder.setPlaceholderText("Average intensity plot area (Qt plot binding step)")
+
+        layout.addLayout(actions)
+        layout.addWidget(table, 1)
+        layout.addWidget(plot_placeholder, 1)
+
+        self.average = AverageControls(refresh_table, plot, table)
+        return tab
 
     @staticmethod
     def _make_slider(minimum: int, maximum: int) -> QSlider:
