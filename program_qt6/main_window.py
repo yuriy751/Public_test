@@ -5,134 +5,200 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
-    QInputDialog,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QSpinBox,
+    QTabWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from .export_service import export_results
 from .gallery_model import GalleryStore
-from .results_tables import ResultsTabs
 from .processing_service import run_boundaries_for_image
 from .results_service import calculate_results
+from .results_tables import ResultsTabs
 from .state_machine import GalleryUiState
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("OCT B-scan | PyQt6 Pilot")
-        self.resize(1200, 700)
+        self.setWindowTitle("OCT B-scan Studio | PyQt6")
+        self.resize(1400, 820)
 
         self.state = GalleryUiState()
         self.boundary_outputs = []
         self.calculated_results = []
         self.gallery_store = GalleryStore(Path.cwd() / "qt6_projects")
         self.current_gallery_id = None
+
         self._build_ui()
+        self._apply_origin_style()
         self._refresh_buttons()
 
     def _build_ui(self) -> None:
         root = QWidget(self)
         self.setCentralWidget(root)
+        root_layout = QVBoxLayout(root)
 
-        layout = QVBoxLayout(root)
-        row = QHBoxLayout()
-        layout.addLayout(row)
+        toolbar = QHBoxLayout()
+        root_layout.addLayout(toolbar)
 
-        self.load_btn = QPushButton("Load images")
-        self.delete_btn = QPushButton("Delete selected")
-        self.process_btn = QPushButton("Add to processing")
-        self.export_btn = QPushButton("Export results")
-        row.addWidget(self.load_btn)
-        row.addWidget(self.delete_btn)
-        row.addWidget(self.process_btn)
-        row.addWidget(self.export_btn)
+        self.new_gallery_btn = QPushButton("New Gallery")
+        self.rename_gallery_btn = QPushButton("Rename")
+        self.load_btn = QPushButton("Import Images")
+        self.delete_btn = QPushButton("Delete Selected")
+        self.process_btn = QPushButton("Add to Processing")
+        self.export_btn = QPushButton("Export")
 
-        gallery_row = QHBoxLayout()
-        layout.addLayout(gallery_row)
+        for w in [
+            self.new_gallery_btn,
+            self.rename_gallery_btn,
+            self.load_btn,
+            self.delete_btn,
+            self.process_btn,
+            self.export_btn,
+        ]:
+            toolbar.addWidget(w)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        root_layout.addWidget(splitter, stretch=1)
+
+        # LEFT: project explorer
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.addWidget(QLabel("Project Explorer"))
         self.gallery_combo = QComboBox()
-        self.new_gallery_btn = QPushButton("New gallery")
-        self.rename_gallery_btn = QPushButton("Rename gallery")
-        gallery_row.addWidget(QLabel("Gallery:"))
-        gallery_row.addWidget(self.gallery_combo)
-        gallery_row.addWidget(self.new_gallery_btn)
-        gallery_row.addWidget(self.rename_gallery_btn)
+        left_layout.addWidget(self.gallery_combo)
+        self.project_tree = QTreeWidget()
+        self.project_tree.setHeaderLabels(["Folder / Gallery / Image"])
+        left_layout.addWidget(self.project_tree)
+        splitter.addWidget(left)
 
-        row2 = QHBoxLayout()
-        layout.addLayout(row2)
+        # CENTER: data workspace
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.addWidget(QLabel("Data Workspace"))
+        self.workspace_tabs = QTabWidget()
+
+        images_tab = QWidget()
+        images_layout = QVBoxLayout(images_tab)
+        self.images = QListWidget()
+        self.images.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        images_layout.addWidget(self.images)
+
+        results_tab = QWidget()
+        results_layout = QVBoxLayout(results_tab)
+        self.results_tabs = ResultsTabs()
+        results_layout.addWidget(self.results_tabs)
+
+        self.workspace_tabs.addTab(images_tab, "Images")
+        self.workspace_tabs.addTab(results_tab, "Workbook")
+        center_layout.addWidget(self.workspace_tabs)
+        splitter.addWidget(center)
+
+        # RIGHT: analysis panel
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
+        right_layout.addWidget(QLabel("Analysis Panel"))
 
         self.roi_btn = QPushButton("ROI")
         self.boundaries_btn = QPushButton("Boundaries calculation")
         self.intensity_btn = QPushButton("Intensity processing")
-        self.mu_t_btn = QPushButton("Mu_t processing")
         self.parameters_btn = QPushButton("Parameters calculation")
+        self.mu_t_btn = QPushButton("Mu_t processing")
 
-        row2.addWidget(self.roi_btn)
-        row2.addWidget(self.boundaries_btn)
-        row2.addWidget(self.intensity_btn)
-        row2.addWidget(self.mu_t_btn)
-        row2.addWidget(self.parameters_btn)
+        for w in [
+            self.roi_btn,
+            self.boundaries_btn,
+            self.intensity_btn,
+            self.parameters_btn,
+            self.mu_t_btn,
+        ]:
+            right_layout.addWidget(w)
 
-        ctrl = QHBoxLayout()
-        layout.addLayout(ctrl)
-        ctrl.addWidget(QLabel("Boundaries count:"))
         self.boundaries_count = QSpinBox()
         self.boundaries_count.setRange(1, 5)
         self.boundaries_count.setValue(2)
-        ctrl.addWidget(self.boundaries_count)
-
         self.roi_x1 = QSpinBox(); self.roi_x1.setRange(0, 10000); self.roi_x1.setValue(10)
         self.roi_x2 = QSpinBox(); self.roi_x2.setRange(0, 10000); self.roi_x2.setValue(500)
         self.roi_y1 = QSpinBox(); self.roi_y1.setRange(0, 10000); self.roi_y1.setValue(10)
         self.roi_y2 = QSpinBox(); self.roi_y2.setRange(0, 10000); self.roi_y2.setValue(500)
-        roi_form = QFormLayout()
-        roi_form.addRow("ROI x1", self.roi_x1)
-        roi_form.addRow("ROI x2", self.roi_x2)
-        roi_form.addRow("ROI y1", self.roi_y1)
-        roi_form.addRow("ROI y2", self.roi_y2)
-        layout.addLayout(roi_form)
 
-        self.images = QListWidget()
-        self.images.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        layout.addWidget(self.images)
+        form = QFormLayout()
+        form.addRow("Boundaries count", self.boundaries_count)
+        form.addRow("ROI x1", self.roi_x1)
+        form.addRow("ROI x2", self.roi_x2)
+        form.addRow("ROI y1", self.roi_y1)
+        form.addRow("ROI y2", self.roi_y2)
+        right_layout.addLayout(form)
 
-        self.results_tabs = ResultsTabs()
-        layout.addWidget(self.results_tabs)
+        self.info = QLabel("Ready")
+        self.info.setWordWrap(True)
+        right_layout.addWidget(self.info)
+        right_layout.addStretch(1)
+        splitter.addWidget(right)
 
-        self.info = QLabel("Pilot state: gallery flow and button gating")
-        self.info.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(self.info)
+        splitter.setSizes([250, 780, 350])
 
-        self.load_btn.clicked.connect(self._load_images)
         self.new_gallery_btn.clicked.connect(self._new_gallery)
         self.rename_gallery_btn.clicked.connect(self._rename_gallery)
         self.gallery_combo.currentIndexChanged.connect(self._switch_gallery)
+        self.load_btn.clicked.connect(self._load_images)
         self.delete_btn.clicked.connect(self._delete_selected)
         self.process_btn.clicked.connect(self._add_to_processing)
         self.export_btn.clicked.connect(self._export_results)
+        self.images.itemSelectionChanged.connect(self._on_selection_changed)
+
         self.roi_btn.clicked.connect(self._run_roi)
         self.boundaries_btn.clicked.connect(self._run_boundaries)
         self.intensity_btn.clicked.connect(self._run_intensity)
         self.parameters_btn.clicked.connect(self._run_parameters)
-        self.mu_t_btn.clicked.connect(lambda: self._notify("Mu_t processing stub"))
+        self.mu_t_btn.clicked.connect(lambda: self._notify("Mu_t processing: next step"))
 
-        self.images.itemSelectionChanged.connect(self._on_selection_changed)
+    def _apply_origin_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QMainWindow, QWidget { background: #f4f6fb; color: #20293a; }
+            QPushButton { background: #e9edf7; border: 1px solid #b9c3dd; padding: 6px 10px; }
+            QPushButton:hover { background: #dce5f8; }
+            QTreeWidget, QListWidget, QTabWidget::pane, QTableWidget {
+                background: #ffffff;
+                border: 1px solid #cfd7ea;
+            }
+            QLabel { font-size: 12px; }
+            """
+        )
+
+    def _notify(self, text: str) -> None:
+        self.info.setText(text)
+
+    def _refresh_project_tree(self) -> None:
+        self.project_tree.clear()
+        for gid, g in self.gallery_store.galleries.items():
+            root = QTreeWidgetItem([f"{g.folder.name} / {g.name}"])
+            root.setData(0, Qt.ItemDataRole.UserRole, gid)
+            for p in g.images:
+                root.addChild(QTreeWidgetItem([Path(p).name]))
+            self.project_tree.addTopLevelItem(root)
 
     def _new_gallery(self) -> None:
         gallery = self.gallery_store.create_gallery()
         self.gallery_combo.addItem(gallery.name, gallery.gallery_id)
         self.gallery_combo.setCurrentIndex(self.gallery_combo.count() - 1)
+        self._refresh_project_tree()
 
     def _rename_gallery(self) -> None:
         if self.current_gallery_id is None:
@@ -146,6 +212,7 @@ class MainWindow(QMainWindow):
         g = self.gallery_store.get(self.current_gallery_id)
         if g is not None:
             self.gallery_combo.setItemText(idx, g.name)
+            self._refresh_project_tree()
 
     def _switch_gallery(self) -> None:
         gid = self.gallery_combo.currentData()
@@ -153,20 +220,22 @@ class MainWindow(QMainWindow):
         self.images.clear()
         g = self.gallery_store.get(gid) if gid is not None else None
         if g is None:
+            self.state.has_images = False
+            self.state.has_selected_images = False
+            self._refresh_buttons()
             return
         for p in g.images:
             self.images.addItem(QListWidgetItem(p))
-
-    def _notify(self, text: str) -> None:
-        self.info.setText(text)
+        self.state.has_images = self.images.count() > 0
+        self.state.has_selected_images = False
+        self._refresh_buttons()
 
     def _load_images(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Select images",
-            str(Path.cwd()),
-            "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)",
+            self, "Select images", str(Path.cwd()), "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"
         )
+        if not files:
+            return
         if self.current_gallery_id is None:
             self._new_gallery()
         g = self.gallery_store.get(self.current_gallery_id)
@@ -178,6 +247,7 @@ class MainWindow(QMainWindow):
         self.state.has_selected_images = len(self.images.selectedItems()) > 0
         if not self.state.has_images:
             self.state.clear_processing()
+        self._refresh_project_tree()
         self._refresh_buttons()
 
     def _delete_selected(self) -> None:
@@ -187,11 +257,11 @@ class MainWindow(QMainWindow):
             self.images.takeItem(self.images.row(item))
             if g is not None and text in g.images:
                 g.images.remove(text)
-
         self.state.has_images = self.images.count() > 0
         self.state.has_selected_images = len(self.images.selectedItems()) > 0
         if not self.state.has_images:
             self.state.clear_processing()
+        self._refresh_project_tree()
         self._refresh_buttons()
 
     def _add_to_processing(self) -> None:
@@ -205,40 +275,32 @@ class MainWindow(QMainWindow):
             self._notify("ROI requires selected images")
             return
         self.state.roi_ready = True
-        self._notify("ROI completed (stub)")
+        self._notify("ROI region accepted")
         self._refresh_buttons()
 
     def _run_boundaries(self) -> None:
         if not self.state.roi_ready:
             self._notify("Boundaries require ROI")
             return
-
         selected = self.images.selectedItems()
         if not selected:
             self._notify("Select images for boundaries")
             return
 
         count = self.boundaries_count.value()
-        roi = (
-            self.roi_x1.value(),
-            self.roi_x2.value(),
-            self.roi_y1.value(),
-            self.roi_y2.value(),
-        )
+        roi = (self.roi_x1.value(), self.roi_x2.value(), self.roi_y1.value(), self.roi_y2.value())
 
         outputs = []
         for item in selected:
             result = run_boundaries_for_image(item.text(), roi, boundaries_count=count)
             if result is not None:
                 outputs.append(result)
-
         if not outputs:
             self._notify("Boundaries failed: check ROI and image files")
             return
 
         self.boundary_outputs = outputs
         self.calculated_results = []
-
         self.state.boundaries_count = count
         self.state.boundaries_ready = True
 
@@ -249,10 +311,7 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) == QMessageBox.StandardButton.Yes
         self.state.last_boundary_is_object_end = is_object_end
-
-        self._notify(
-            f"Boundaries completed for {len(outputs)} image(s). count={count}, last_is_object_end={is_object_end}"
-        )
+        self._notify(f"Boundaries completed for {len(outputs)} image(s)")
         self._refresh_buttons()
 
     def _run_intensity(self) -> None:
@@ -268,6 +327,7 @@ class MainWindow(QMainWindow):
             self._notify("Intensity processing failed")
             return
         self.results_tabs.load_results(self.calculated_results)
+        self.workspace_tabs.setCurrentIndex(1)
         self._notify(f"Intensity processing done for {len(self.calculated_results)} image(s)")
 
     def _run_parameters(self) -> None:
