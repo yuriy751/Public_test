@@ -4,8 +4,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFormLayout,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -18,7 +18,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .export_service import export_results
 from .processing_service import run_boundaries_for_image
+from .results_service import calculate_results
 from .state_machine import GalleryUiState
 
 
@@ -29,6 +31,8 @@ class MainWindow(QMainWindow):
         self.resize(1200, 700)
 
         self.state = GalleryUiState()
+        self.boundary_outputs = []
+        self.calculated_results = []
         self._build_ui()
         self._refresh_buttons()
 
@@ -43,9 +47,11 @@ class MainWindow(QMainWindow):
         self.load_btn = QPushButton("Load images")
         self.delete_btn = QPushButton("Delete selected")
         self.process_btn = QPushButton("Add to processing")
+        self.export_btn = QPushButton("Export results")
         row.addWidget(self.load_btn)
         row.addWidget(self.delete_btn)
         row.addWidget(self.process_btn)
+        row.addWidget(self.export_btn)
 
         row2 = QHBoxLayout()
         layout.addLayout(row2)
@@ -92,10 +98,11 @@ class MainWindow(QMainWindow):
         self.load_btn.clicked.connect(self._load_images)
         self.delete_btn.clicked.connect(self._delete_selected)
         self.process_btn.clicked.connect(self._add_to_processing)
+        self.export_btn.clicked.connect(self._export_results)
         self.roi_btn.clicked.connect(self._run_roi)
         self.boundaries_btn.clicked.connect(self._run_boundaries)
-        self.intensity_btn.clicked.connect(lambda: self._notify("Intensity processing stub"))
-        self.parameters_btn.clicked.connect(lambda: self._notify("Parameters calculation stub"))
+        self.intensity_btn.clicked.connect(self._run_intensity)
+        self.parameters_btn.clicked.connect(self._run_parameters)
         self.mu_t_btn.clicked.connect(lambda: self._notify("Mu_t processing stub"))
 
         self.images.itemSelectionChanged.connect(self._on_selection_changed)
@@ -170,6 +177,9 @@ class MainWindow(QMainWindow):
             self._notify("Boundaries failed: check ROI and image files")
             return
 
+        self.boundary_outputs = outputs
+        self.calculated_results = []
+
         self.state.boundaries_count = count
         self.state.boundaries_ready = True
 
@@ -185,6 +195,38 @@ class MainWindow(QMainWindow):
             f"Boundaries completed for {len(outputs)} image(s). count={count}, last_is_object_end={is_object_end}"
         )
         self._refresh_buttons()
+
+    def _run_intensity(self) -> None:
+        if not self.boundary_outputs:
+            self._notify("Run boundaries first")
+            return
+        self.calculated_results = []
+        for out in self.boundary_outputs:
+            res = calculate_results(out.image_path, out)
+            if res is not None:
+                self.calculated_results.append(res)
+        if not self.calculated_results:
+            self._notify("Intensity processing failed")
+            return
+        self._notify(f"Intensity processing done for {len(self.calculated_results)} image(s)")
+
+    def _run_parameters(self) -> None:
+        if not self.calculated_results:
+            self._notify("Run intensity processing first")
+            return
+        lines = sum(len(r.boundary_stats) for r in self.calculated_results)
+        pairs = sum(len(r.thickness_stats) for r in self.calculated_results)
+        self._notify(f"Parameters calculated: boundary rows={lines}, thickness rows={pairs}")
+
+    def _export_results(self) -> None:
+        if not self.calculated_results:
+            self._notify("Nothing to export. Run intensity first.")
+            return
+        out_dir = QFileDialog.getExistingDirectory(self, "Select export folder", str(Path.cwd()))
+        if not out_dir:
+            return
+        folder = export_results(self.calculated_results, out_dir)
+        self._notify(f"Export done: {folder}")
 
     def _on_selection_changed(self) -> None:
         self.state.has_selected_images = len(self.images.selectedItems()) > 0
