@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QSpinBox,
     QTabWidget,
+    QProgressBar,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -156,6 +157,11 @@ class MainWindow(QMainWindow):
         self.info = QLabel("Ready")
         self.info.setWordWrap(True)
         right_layout.addWidget(self.info)
+
+        self.batch_progress = QProgressBar()
+        self.batch_progress.setRange(0, 100)
+        self.batch_progress.setValue(0)
+        right_layout.addWidget(self.batch_progress)
         right_layout.addStretch(1)
         splitter.addWidget(right)
 
@@ -295,15 +301,56 @@ class MainWindow(QMainWindow):
                 outputs.append(result)
         return outputs
 
-    def _process_all_galleries(self) -> None:
-        all_images = []
+    def _compute_all_galleries_batch(self):
+        count = self.boundaries_count.value()
+        roi = (self.roi_x1.value(), self.roi_x2.value(), self.roi_y1.value(), self.roi_y2.value())
+        total = sum(len(g.images) for g in self.gallery_store.galleries.values())
+        done = 0
+        outputs = []
         for g in self.gallery_store.galleries.values():
-            all_images.extend(g.images)
-        if not all_images:
+            for p in g.images:
+                out = run_boundaries_for_image(p, roi, boundaries_count=count)
+                if out is not None:
+                    outputs.append(out)
+                done += 1
+        return {"outputs": outputs, "total": total, "done": done}
+
+    def _process_all_galleries(self) -> None:
+        total = sum(len(g.images) for g in self.gallery_store.galleries.values())
+        if total == 0:
             self._notify("No images in galleries")
             return
-        # just a queue marker step for now
-        self._notify(f"Queued {len(all_images)} image(s) across all galleries")
+        self.batch_progress.setValue(5)
+        self._notify(f"Running batch processing for {total} image(s)...")
+
+        worker = FunctionWorker(self._compute_all_galleries_batch)
+
+        def _done(task_result):
+            payload = task_result.payload
+            outputs = payload.get("outputs", [])
+            total_local = payload.get("total", 0)
+            done_local = payload.get("done", 0)
+            self.batch_progress.setValue(100)
+            if not outputs:
+                self._notify("Batch done, but no valid outputs")
+                return
+            self.boundary_outputs = outputs
+            self.calculated_results = []
+            for out in outputs:
+                res = calculate_results(out.image_path, out)
+                if res is not None:
+                    self.calculated_results.append(res)
+            self.results_tabs.load_results(self.calculated_results)
+            self.workspace_tabs.setCurrentIndex(1)
+            self._notify(f"Batch completed: {done_local}/{total_local} image(s), outputs={len(outputs)}")
+
+        def _err(msg):
+            self.batch_progress.setValue(0)
+            self._notify(f"Batch error: {msg}")
+
+        worker.signals.finished.connect(_done)
+        worker.signals.error.connect(_err)
+        self.thread_pool.start(worker)
 
     def _run_boundaries(self) -> None:
         if not self.state.roi_ready:
