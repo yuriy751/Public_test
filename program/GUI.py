@@ -1,90 +1,74 @@
-import dearpygui.dearpygui as dpg
+from __future__ import annotations
 
-from .tags import TAGS
+import sys
+from typing import Callable
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QApplication,
+    QLabel,
+    QMainWindow,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
 from .state import STATE
-from .widgets import *
-from .widgets import tabs
-from .widgets.parameters_window.parameters_window import parameters_window_func
-from .interface_functions.resize import resize_gui
 
 
-def gui():
-    dpg.create_context()
-    dpg.create_viewport(title='New File', min_width=1700, min_height=930, resizable=True, width=1700, height=950,
-                        disable_close=False
-                        )
-    dpg.set_viewport_resize_callback(callback=resize_gui)
+class MainWindow(QMainWindow):
+    """PyQt6 replacement for the legacy DearPyGui shell.
 
-    # --- Disable theme ---
-    with dpg.theme() as disabled_theme:
-        with dpg.theme_component(dpg.mvInputFloat, enabled_state=False):
-            dpg.add_theme_color(dpg.mvThemeCol_Text, [200, 200, 200])
-            dpg.add_theme_color(dpg.mvThemeCol_Button, [100, 100, 100])
+    The computational pipeline and state management stay untouched; only the UI
+    container is migrated so the rest of the project can be incrementally bound
+    to Qt widgets.
+    """
 
-        with dpg.theme_component(dpg.mvInputInt, enabled_state=False):
-            dpg.add_theme_color(dpg.mvThemeCol_Text, [200, 200, 200])
-            dpg.add_theme_color(dpg.mvThemeCol_Button, [100, 100, 100])
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("New File")
+        self.setMinimumSize(1700, 930)
+        self.resize(1700, 950)
 
-        with dpg.theme_component(dpg.mvButton, enabled_state=False):
-            dpg.add_theme_color(dpg.mvThemeCol_Text, [200, 200, 200])
-            dpg.add_theme_color(dpg.mvThemeCol_Button, [100, 100, 100])
+        root = QWidget(self)
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(8, 8, 8, 8)
 
-    dpg.bind_theme(disabled_theme)
+        self.tabs = QTabWidget(root)
+        self._build_tabs()
+        root_layout.addWidget(self.tabs)
+        self.setCentralWidget(root)
 
-    texture_creation()
+    def _build_tabs(self) -> None:
+        self._add_placeholder_tab("ROI")
+        self._add_placeholder_tab("Boundary calculation")
+        self._add_placeholder_tab("Mu_s calculation")
+        self._add_placeholder_tab("Average intensity calculation")
+        self._add_placeholder_tab("Graphs drawing")
+        self._add_placeholder_tab("Save CSV")
+        self._add_placeholder_tab("Processing photos")
+        self._add_placeholder_tab("Processed photos")
 
-    # --- File dialogs ---
-    last_processing_folder()
-    last_save_project_folder()
-    last_open_folder()
-    last_save_folder_for_files()
-    last_save_folder_for_images()
+    def _add_placeholder_tab(self, title: str) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        label = QLabel(
+            "This tab shell was migrated to PyQt6.\n"
+            "Existing calculation logic is unchanged and can be wired here incrementally."
+        )
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+        self.tabs.addTab(tab, title)
 
-    # --- Asking windows ---
-    new_project_window()
-    close_window()
-    open_project_window()
 
-    # --- Menu bar ---
-    menu_bar_func()
+def _ensure_state_defaults() -> None:
+    # Keep the same startup-side state expectations used by the old GUI shell.
+    STATE.scale.window_scale = 1.0
 
-    with dpg.window(tag=TAGS.windows.main,
-                    pos=(0, STATE.constants.const_1),
-                    no_close=True, no_collapse=True, no_move=True, no_resize=True, no_title_bar=True, no_scrollbar=True,
-                    no_scroll_with_mouse=True,
-                    height=dpg.get_viewport_height() - STATE.constants.const_1,
-                    width=dpg.get_viewport_width()-40):
-        STATE.scale.window_scale = dpg.get_item_width(TAGS.windows.main) / dpg.get_viewport_width()
-        parameters_window_func()
 
-        with dpg.tab_bar():
-
-            # --- ROI tab ---
-            tabs.roi_tab_func()
-
-            # --- Boundary calculation ---
-            tabs.boundary_tab_func()
-
-            # --- Mu_s calculation ---
-            tabs.mu_s_tab_func()
-
-            # --- Average intensity calculation ---
-            tabs.average_tab_func()
-
-            # --- Graphs drawing ---
-            tabs.graph_tab_func()
-
-            # --- Save CSV ---
-            tabs.save_tab_func()
-
-            # --- Processing photos ---
-            tabs.processing_tab_func()
-
-            # --- Processed photos ---
-            tabs.processed_tab_func()
-
-    # --- Run ---
-    dpg.show_viewport()
-    dpg.setup_dearpygui()
-    dpg.start_dearpygui()
-    dpg.destroy_context()
+def gui() -> None:
+    _ensure_state_defaults()
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.exec()
