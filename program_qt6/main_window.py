@@ -33,6 +33,7 @@ from .parameters_service import calculate_parameters_from_table
 from .processing_service import run_boundaries_for_image
 from .results_service import calculate_results, depth_mapping
 from .results_tables import ResultsTabs
+from .roi_canvas import RoiCanvas
 from .state_machine import GalleryUiState
 from .workers import FunctionWorker
 
@@ -111,6 +112,9 @@ class MainWindow(QMainWindow):
         self.images.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         images_layout.addWidget(self.images)
 
+        self.roi_canvas = RoiCanvas()
+        images_layout.addWidget(self.roi_canvas)
+
         results_tab = QWidget()
         results_layout = QVBoxLayout(results_tab)
         self.results_tabs = ResultsTabs()
@@ -180,6 +184,7 @@ class MainWindow(QMainWindow):
         self.process_all_btn.clicked.connect(self._process_all_galleries)
         self.cancel_btn.clicked.connect(self._cancel_active_task)
         self.images.itemSelectionChanged.connect(self._on_selection_changed)
+        self.roi_canvas.roi_changed.connect(self._on_roi_drawn)
 
         self.roi_btn.clicked.connect(self._run_roi)
         self.boundaries_btn.clicked.connect(self._run_boundaries)
@@ -534,8 +539,18 @@ class MainWindow(QMainWindow):
         folder = export_results(self.calculated_results, out_dir)
         self._notify(f"Export done: {folder}")
 
+    def _on_roi_drawn(self, x1: int, x2: int, y1: int, y2: int) -> None:
+        self.roi_x1.setValue(max(0, min(x1, x2)))
+        self.roi_x2.setValue(max(0, max(x1, x2)))
+        self.roi_y1.setValue(max(0, min(y1, y2)))
+        self.roi_y2.setValue(max(0, max(y1, y2)))
+        self._notify("ROI updated from canvas")
+
     def _on_selection_changed(self) -> None:
-        self.state.has_selected_images = len(self.images.selectedItems()) > 0
+        selected = self.images.selectedItems()
+        self.state.has_selected_images = len(selected) > 0
+        if selected:
+            self.roi_canvas.set_image(selected[0].text())
         self._refresh_buttons()
 
     def _refresh_buttons(self) -> None:
