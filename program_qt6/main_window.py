@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QInputDialog,
+    QLineEdit,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -26,6 +27,7 @@ from PyQt6.QtWidgets import (
 
 from .export_service import export_results
 from .gallery_model import GalleryStore
+from .mut_service import MuTConfig, choose_refractive_index
 from .processing_service import run_boundaries_for_image
 from .results_service import calculate_results
 from .results_tables import ResultsTabs
@@ -166,7 +168,7 @@ class MainWindow(QMainWindow):
         self.boundaries_btn.clicked.connect(self._run_boundaries)
         self.intensity_btn.clicked.connect(self._run_intensity)
         self.parameters_btn.clicked.connect(self._run_parameters)
-        self.mu_t_btn.clicked.connect(lambda: self._notify("Mu_t processing: next step"))
+        self.mu_t_btn.clicked.connect(self._run_mu_t)
 
     def _apply_origin_style(self) -> None:
         self.setStyleSheet(
@@ -329,6 +331,54 @@ class MainWindow(QMainWindow):
         self.results_tabs.load_results(self.calculated_results)
         self.workspace_tabs.setCurrentIndex(1)
         self._notify(f"Intensity processing done for {len(self.calculated_results)} image(s)")
+
+    def _run_mu_t(self) -> None:
+        if not self.state.boundaries_ready:
+            self._notify("Mu_t requires boundaries")
+            return
+
+        mode = "manual"
+        if self.state.boundaries_count >= 2 and self.state.last_boundary_is_object_end:
+            choice, ok = QInputDialog.getItem(
+                self,
+                "Mu_t refractive index",
+                "Select refractive index source:",
+                ["manual", "auto"],
+                0,
+                False,
+            )
+            if not ok:
+                return
+            mode = choice
+
+        manual_n = None
+        auto_n = 1.38  # placeholder until parameters module computes mean n
+
+        if mode == "manual" or self.state.boundaries_count <= 1 or not self.state.last_boundary_is_object_end:
+            text, ok = QInputDialog.getText(self, "Manual n", "Enter refractive index n:", QLineEdit.EchoMode.Normal, "1.38")
+            if not ok:
+                return
+            try:
+                manual_n = float(text)
+            except ValueError:
+                self._notify("Invalid refractive index value")
+                return
+
+        try:
+            decision = choose_refractive_index(
+                MuTConfig(
+                    boundaries_count=self.state.boundaries_count,
+                    last_boundary_is_object_end=self.state.last_boundary_is_object_end,
+                    refractive_index_mode=mode,
+                    manual_refractive_index=manual_n,
+                    auto_refractive_index=auto_n,
+                )
+            )
+        except Exception as e:
+            self._notify(f"Mu_t config error: {e}")
+            return
+
+        self._notify(f"Mu_t ready: n={decision.use_refractive_index:.4f} ({decision.source})")
 
     def _run_parameters(self) -> None:
         if not self.calculated_results:
