@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QFormLayout,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .processing_service import run_boundaries_for_image
 from .state_machine import GalleryUiState
 
 
@@ -67,6 +69,17 @@ class MainWindow(QMainWindow):
         self.boundaries_count.setRange(1, 5)
         self.boundaries_count.setValue(2)
         ctrl.addWidget(self.boundaries_count)
+
+        self.roi_x1 = QSpinBox(); self.roi_x1.setRange(0, 10000); self.roi_x1.setValue(10)
+        self.roi_x2 = QSpinBox(); self.roi_x2.setRange(0, 10000); self.roi_x2.setValue(500)
+        self.roi_y1 = QSpinBox(); self.roi_y1.setRange(0, 10000); self.roi_y1.setValue(10)
+        self.roi_y2 = QSpinBox(); self.roi_y2.setRange(0, 10000); self.roi_y2.setValue(500)
+        roi_form = QFormLayout()
+        roi_form.addRow("ROI x1", self.roi_x1)
+        roi_form.addRow("ROI x2", self.roi_x2)
+        roi_form.addRow("ROI y1", self.roi_y1)
+        roi_form.addRow("ROI y2", self.roi_y2)
+        layout.addLayout(roi_form)
 
         self.images = QListWidget()
         self.images.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
@@ -134,7 +147,29 @@ class MainWindow(QMainWindow):
             self._notify("Boundaries require ROI")
             return
 
+        selected = self.images.selectedItems()
+        if not selected:
+            self._notify("Select images for boundaries")
+            return
+
         count = self.boundaries_count.value()
+        roi = (
+            self.roi_x1.value(),
+            self.roi_x2.value(),
+            self.roi_y1.value(),
+            self.roi_y2.value(),
+        )
+
+        outputs = []
+        for item in selected:
+            result = run_boundaries_for_image(item.text(), roi, boundaries_count=count)
+            if result is not None:
+                outputs.append(result)
+
+        if not outputs:
+            self._notify("Boundaries failed: check ROI and image files")
+            return
+
         self.state.boundaries_count = count
         self.state.boundaries_ready = True
 
@@ -147,7 +182,7 @@ class MainWindow(QMainWindow):
         self.state.last_boundary_is_object_end = is_object_end
 
         self._notify(
-            f"Boundaries completed: count={count}, last_is_object_end={is_object_end}"
+            f"Boundaries completed for {len(outputs)} image(s). count={count}, last_is_object_end={is_object_end}"
         )
         self._refresh_buttons()
 

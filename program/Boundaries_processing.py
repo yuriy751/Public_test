@@ -96,7 +96,7 @@ def preprocess_roi(roi: np.ndarray) -> np.ndarray:
 # ------------------- DETECT BOUNDARIES ----------------------
 # ============================================================
 
-def detect_boundaries(img_gray, x1, x2, y1, y2, n_bounds):
+def detect_boundaries(img_gray, x1, x2, y1, y2, n_bounds, shift=None):
 
     roi = img_gray[y1:y2, x1:x2]
 
@@ -124,7 +124,9 @@ def detect_boundaries(img_gray, x1, x2, y1, y2, n_bounds):
     boundaries.append(top)
 
     score = ridge.copy()
-    shift = dpg.get_value(TAGS.inputs.segments)
+    if shift is None:
+        shift = dpg.get_value(TAGS.inputs.segments)
+    shift = int(shift)
     # подавляем верхнюю
     for x in range(w):
         z = int(top[x])
