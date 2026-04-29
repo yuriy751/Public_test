@@ -8,6 +8,7 @@ from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 class WorkerSignals(QObject):
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
+    progress = pyqtSignal(int)
 
 
 @dataclass
@@ -23,10 +24,14 @@ class FunctionWorker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
 
     def run(self) -> None:
         try:
-            value = self.fn(*self.args, **self.kwargs)
+            value = self.fn(self, *self.args, **self.kwargs)
         except Exception as e:
             self.signals.error.emit(str(e))
             return

@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.current_gallery_id = None
         self.auto_refractive_index = None
         self.thread_pool = QThreadPool.globalInstance()
+        self.active_worker = None
 
         self._build_ui()
         self._apply_origin_style()
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
         self.process_btn = QPushButton("Add to Processing")
         self.export_btn = QPushButton("Export")
         self.process_all_btn = QPushButton("Process all galleries")
+        self.cancel_btn = QPushButton("Cancel task")
 
         for w in [
             self.new_gallery_btn,
@@ -79,6 +81,7 @@ class MainWindow(QMainWindow):
             self.process_btn,
             self.export_btn,
             self.process_all_btn,
+            self.cancel_btn,
         ]:
             toolbar.addWidget(w)
 
@@ -175,6 +178,7 @@ class MainWindow(QMainWindow):
         self.process_btn.clicked.connect(self._add_to_processing)
         self.export_btn.clicked.connect(self._export_results)
         self.process_all_btn.clicked.connect(self._process_all_galleries)
+        self.cancel_btn.clicked.connect(self._cancel_active_task)
         self.images.itemSelectionChanged.connect(self._on_selection_changed)
 
         self.roi_btn.clicked.connect(self._run_roi)
@@ -293,15 +297,19 @@ class MainWindow(QMainWindow):
         self._notify("ROI region accepted")
         self._refresh_buttons()
 
-    def _compute_boundaries_batch(self, image_paths: list[str], roi: tuple[int, int, int, int], count: int):
+    def _compute_boundaries_batch(self, worker, image_paths: list[str], roi: tuple[int, int, int, int], count: int):
         outputs = []
-        for path in image_paths:
+        total = max(1, len(image_paths))
+        for i, path in enumerate(image_paths, start=1):
+            if worker.cancelled:
+                break
             result = run_boundaries_for_image(path, roi, boundaries_count=count)
             if result is not None:
                 outputs.append(result)
+            worker.signals.progress.emit(int(i / total * 100))
         return outputs
 
-    def _compute_all_galleries_batch(self):
+    def _compute_all_galleries_batch(self, worker):
         count = self.boundaries_count.value()
         roi = (self.roi_x1.value(), self.roi_x2.value(), self.roi_y1.value(), self.roi_y2.value())
         total = sum(len(g.images) for g in self.gallery_store.galleries.values())
@@ -309,11 +317,21 @@ class MainWindow(QMainWindow):
         outputs = []
         for g in self.gallery_store.galleries.values():
             for p in g.images:
+                if worker.cancelled:
+                    return {"outputs": outputs, "total": total, "done": done, "cancelled": True}
                 out = run_boundaries_for_image(p, roi, boundaries_count=count)
                 if out is not None:
                     outputs.append(out)
                 done += 1
-        return {"outputs": outputs, "total": total, "done": done}
+                worker.signals.progress.emit(int(done / max(1, total) * 100))
+        return {"outputs": outputs, "total": total, "done": done, "cancelled": False}
+
+    def _cancel_active_task(self) -> None:
+        if self.active_worker is None:
+            self._notify("No active background task")
+            return
+        self.active_worker.cancel()
+        self._notify("Cancellation requested...")
 
     def _process_all_galleries(self) -> None:
         total = sum(len(g.images) for g in self.gallery_store.galleries.values())
@@ -324,10 +342,15 @@ class MainWindow(QMainWindow):
         self._notify(f"Running batch processing for {total} image(s)...")
 
         worker = FunctionWorker(self._compute_all_galleries_batch)
+        self.active_worker = worker
 
         def _done(task_result):
+            self.active_worker = None
             payload = task_result.payload
             outputs = payload.get("outputs", [])
+            if payload.get("cancelled"):
+                self._notify(f"Batch cancelled: {payload.get('done',0)}/{payload.get('total',0)}")
+                return
             total_local = payload.get("total", 0)
             done_local = payload.get("done", 0)
             self.batch_progress.setValue(100)
@@ -345,11 +368,16 @@ class MainWindow(QMainWindow):
             self._notify(f"Batch completed: {done_local}/{total_local} image(s), outputs={len(outputs)}")
 
         def _err(msg):
+            self.active_worker = None
             self.batch_progress.setValue(0)
             self._notify(f"Batch error: {msg}")
 
+        def _progress(v):
+            self.batch_progress.setValue(v)
+
         worker.signals.finished.connect(_done)
         worker.signals.error.connect(_err)
+        worker.signals.progress.connect(_progress)
         self.thread_pool.start(worker)
 
     def _run_boundaries(self) -> None:
@@ -367,8 +395,11 @@ class MainWindow(QMainWindow):
         paths = [i.text() for i in selected]
         self._notify(f"Running boundaries in background for {len(paths)} image(s)...")
         worker = FunctionWorker(self._compute_boundaries_batch, paths, roi, count)
+        self.active_worker = worker
+        self.batch_progress.setValue(0)
 
         def _done(task_result):
+            self.active_worker = None
             outputs = task_result.payload
             if not outputs:
                 self._notify("Boundaries failed: check ROI and image files")
@@ -389,10 +420,15 @@ class MainWindow(QMainWindow):
             self._refresh_buttons()
 
         def _err(msg):
+            self.active_worker = None
             self._notify(f"Background error: {msg}")
+
+        def _progress(v):
+            self.batch_progress.setValue(v)
 
         worker.signals.finished.connect(_done)
         worker.signals.error.connect(_err)
+        worker.signals.progress.connect(_progress)
         self.thread_pool.start(worker)
 
     def _run_intensity(self) -> None:
