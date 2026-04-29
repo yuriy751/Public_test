@@ -26,3 +26,20 @@ def export_results(results: list[ImageResults], out_dir: str) -> Path:
                 writer.writerow([r.image_path, b.line_index, b.min_y, b.max_y, b.median_y, mean_int])
 
     return root
+
+
+def export_results_grouped_by_gallery(results, gallery_store) -> list[Path]:
+    created = []
+    groups = {}
+    for r in results:
+        g = gallery_store.find_gallery_by_image(r.image_path)
+        if g is None:
+            continue
+        groups.setdefault(g.gallery_id, {"gallery": g, "items": []})["items"].append(r)
+
+    for payload in groups.values():
+        g = payload["gallery"]
+        out_dir = g.folder / "exports"
+        export_results(payload["items"], str(out_dir))
+        created.append(out_dir)
+    return created

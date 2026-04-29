@@ -35,3 +35,10 @@ class GalleryStore:
 
     def get(self, gid: int) -> Gallery | None:
         return self.galleries.get(gid)
+
+
+    def find_gallery_by_image(self, image_path: str) -> Gallery | None:
+        for g in self.galleries.values():
+            if image_path in g.images:
+                return g
+        return None

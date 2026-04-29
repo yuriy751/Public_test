@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .export_service import export_results
+from .export_service import export_results, export_results_grouped_by_gallery
 from .gallery_model import GalleryStore
 from .mut_service import MuTConfig, choose_refractive_index
 from .parameters_service import calculate_parameters_from_table
@@ -331,6 +331,9 @@ class MainWindow(QMainWindow):
             self._notify("No active background task")
             return
         self.active_worker.cancel()
+        self.batch_progress.setValue(0)
+        self.boundary_outputs = []
+        self.calculated_results = []
         self._notify("Cancellation requested...")
 
     def _process_all_galleries(self) -> None:
@@ -349,6 +352,9 @@ class MainWindow(QMainWindow):
             payload = task_result.payload
             outputs = payload.get("outputs", [])
             if payload.get("cancelled"):
+                self.batch_progress.setValue(0)
+                self.boundary_outputs = []
+                self.calculated_results = []
                 self._notify(f"Batch cancelled: {payload.get('done',0)}/{payload.get('total',0)}")
                 return
             total_local = payload.get("total", 0)
@@ -365,7 +371,8 @@ class MainWindow(QMainWindow):
                     self.calculated_results.append(res)
             self.results_tabs.load_results(self.calculated_results)
             self.workspace_tabs.setCurrentIndex(1)
-            self._notify(f"Batch completed: {done_local}/{total_local} image(s), outputs={len(outputs)}")
+            export_dirs = export_results_grouped_by_gallery(self.calculated_results, self.gallery_store)
+            self._notify(f"Batch completed: {done_local}/{total_local} image(s), outputs={len(outputs)}, exports={len(export_dirs)}")
 
         def _err(msg):
             self.active_worker = None
