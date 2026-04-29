@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThreadPool
 from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -33,6 +33,7 @@ from .processing_service import run_boundaries_for_image
 from .results_service import calculate_results, depth_mapping
 from .results_tables import ResultsTabs
 from .state_machine import GalleryUiState
+from .workers import FunctionWorker
 
 
 class MainWindow(QMainWindow):
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow):
         self.gallery_store = GalleryStore(Path.cwd() / "qt6_projects")
         self.current_gallery_id = None
         self.auto_refractive_index = None
+        self.thread_pool = QThreadPool.globalInstance()
 
         self._build_ui()
         self._apply_origin_style()
@@ -66,6 +68,7 @@ class MainWindow(QMainWindow):
         self.delete_btn = QPushButton("Delete Selected")
         self.process_btn = QPushButton("Add to Processing")
         self.export_btn = QPushButton("Export")
+        self.process_all_btn = QPushButton("Process all galleries")
 
         for w in [
             self.new_gallery_btn,
@@ -74,6 +77,7 @@ class MainWindow(QMainWindow):
             self.delete_btn,
             self.process_btn,
             self.export_btn,
+            self.process_all_btn,
         ]:
             toolbar.addWidget(w)
 
@@ -164,6 +168,7 @@ class MainWindow(QMainWindow):
         self.delete_btn.clicked.connect(self._delete_selected)
         self.process_btn.clicked.connect(self._add_to_processing)
         self.export_btn.clicked.connect(self._export_results)
+        self.process_all_btn.clicked.connect(self._process_all_galleries)
         self.images.itemSelectionChanged.connect(self._on_selection_changed)
 
         self.roi_btn.clicked.connect(self._run_roi)
@@ -282,6 +287,24 @@ class MainWindow(QMainWindow):
         self._notify("ROI region accepted")
         self._refresh_buttons()
 
+    def _compute_boundaries_batch(self, image_paths: list[str], roi: tuple[int, int, int, int], count: int):
+        outputs = []
+        for path in image_paths:
+            result = run_boundaries_for_image(path, roi, boundaries_count=count)
+            if result is not None:
+                outputs.append(result)
+        return outputs
+
+    def _process_all_galleries(self) -> None:
+        all_images = []
+        for g in self.gallery_store.galleries.values():
+            all_images.extend(g.images)
+        if not all_images:
+            self._notify("No images in galleries")
+            return
+        # just a queue marker step for now
+        self._notify(f"Queued {len(all_images)} image(s) across all galleries")
+
     def _run_boundaries(self) -> None:
         if not self.state.roi_ready:
             self._notify("Boundaries require ROI")
@@ -294,29 +317,36 @@ class MainWindow(QMainWindow):
         count = self.boundaries_count.value()
         roi = (self.roi_x1.value(), self.roi_x2.value(), self.roi_y1.value(), self.roi_y2.value())
 
-        outputs = []
-        for item in selected:
-            result = run_boundaries_for_image(item.text(), roi, boundaries_count=count)
-            if result is not None:
-                outputs.append(result)
-        if not outputs:
-            self._notify("Boundaries failed: check ROI and image files")
-            return
+        paths = [i.text() for i in selected]
+        self._notify(f"Running boundaries in background for {len(paths)} image(s)...")
+        worker = FunctionWorker(self._compute_boundaries_batch, paths, roi, count)
 
-        self.boundary_outputs = outputs
-        self.calculated_results = []
-        self.state.boundaries_count = count
-        self.state.boundaries_ready = True
+        def _done(task_result):
+            outputs = task_result.payload
+            if not outputs:
+                self._notify("Boundaries failed: check ROI and image files")
+                return
+            self.boundary_outputs = outputs
+            self.calculated_results = []
+            self.state.boundaries_count = count
+            self.state.boundaries_ready = True
 
-        is_object_end = QMessageBox.question(
-            self,
-            "Boundary type",
-            "Is the last boundary the object/external-medium boundary?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        ) == QMessageBox.StandardButton.Yes
-        self.state.last_boundary_is_object_end = is_object_end
-        self._notify(f"Boundaries completed for {len(outputs)} image(s)")
-        self._refresh_buttons()
+            is_object_end = QMessageBox.question(
+                self,
+                "Boundary type",
+                "Is the last boundary the object/external-medium boundary?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            ) == QMessageBox.StandardButton.Yes
+            self.state.last_boundary_is_object_end = is_object_end
+            self._notify(f"Boundaries completed for {len(outputs)} image(s)")
+            self._refresh_buttons()
+
+        def _err(msg):
+            self._notify(f"Background error: {msg}")
+
+        worker.signals.finished.connect(_done)
+        worker.signals.error.connect(_err)
+        self.thread_pool.start(worker)
 
     def _run_intensity(self) -> None:
         if not self.boundary_outputs:
