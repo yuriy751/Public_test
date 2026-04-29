@@ -1,0 +1,41 @@
+# buttons.py
+
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ButtonTags:
+    show_boundary_image: str = 'Show boundary image tag'
+    save_quit: str = 'Save-quit tag'
+    quit_quit: str = 'Quit-quit tag'
+    cancel_quit: str = 'Cancel-quit tag'
+    image_upload: str = 'Image upload tag'
+    images_delete: str = 'Images delete tag'
+    images_process: str = 'Images process tag'
+    process: str = 'Process button tag'
+    viewing_photos: str = 'Viewing photos button tag'
+    hide_boundary_window: str = 'Hide boundary window tag'
+    refresh_boundary_table: str = 'Refesh boundary table'
+    mu_s_load: str = 'Mu_s button load tag'
+    mu_s_prev: str = 'Mu_s button prev tag'
+    mu_s_next: str = 'Mu_s button next tag'
+    mu_s_refresh_table: str = 'Mu_s table refresh button tag'
+    mu_s_focus_line: str = 'Mu_s focus line button tag'
+    mu_s_show: str = 'Mu_s show button tag'
+    close_mu_s_image_window: str = 'Close mu_s image window tag'
+    load_mu_s_images: str = 'Load mu_s images tag'
+    prev_mu_s_image: str = 'Prev mu_s image tag'
+    next_mu_s_image: str = 'Next mu_s image tag'
+    average_table_process: str = 'Average table proc button tag'
+    average_intensity_plot: str = 'Average intensity plot button tag'
+    plot_processing: str = 'Plot processing button tag'
+    parameter_processing: str = 'Parameter processing button tag'
+    time: str = 'Time button tag'
+    time_ok: str = 'Ok time button tag'
+    time_cancel: str = 'Cancel time button tag'
+    save_files: str = 'Save files button tag'
+    ri_s_parameters: str = 'RIs parameters button tag'
+    popup_param_window: str = 'Popup parameter window tag'
+    save_params: str = 'Save parameters button tag'
+    save_ris: str = 'Save RIs button tag'
+    save_images: str = 'Save images button tag'
+    
