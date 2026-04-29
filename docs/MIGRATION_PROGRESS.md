@@ -1,7 +1,7 @@
 # PyQt6 Migration Progress
 
 ## Estimated completion
-Current estimated migration completion: **~42%**.
+Current estimated migration completion: **~52%**.
 
 ## Estimation method
 Weighted block estimate:
@@ -14,11 +14,11 @@ Weighted block estimate:
 Current completion by block:
 - UI framework migration and new window architecture: 75%
 - Gallery/folder workflow and project model: 60%
-- ROI/Boundaries/Intensity/Parameters/Mu_t workflow logic: 35%
-- Exports and persistence: 45%
+- ROI/Boundaries/Intensity/Parameters/Mu_t workflow logic: 50%
+- Exports and persistence: 50%
 - Validation, tests, parity against legacy app: 5%
 
-Weighted total: **~42%**.
+Weighted total: **~52%**.
 
 ## Implemented
 - OriginPro-like 3-pane studio layout and workbook tabs.

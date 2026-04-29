@@ -85,3 +85,23 @@ def calculate_results(image_path: str, boundaries_output: BoundariesOutput) -> I
         thickness_stats=thickness_stats,
         mean_intensity_by_roi=intensities,
     )
+
+
+@dataclass
+class DepthMappingResult:
+    roi_index: int
+    window: int
+    step: int
+    profile: list[float]
+
+
+def depth_mapping(intensities: list[float], window: int = 3, step: int = 1) -> DepthMappingResult:
+    if not intensities:
+        return DepthMappingResult(roi_index=1, window=window, step=step, profile=[])
+    vals = np.array(intensities, dtype=float)
+    if window <= 1 or len(vals) < window:
+        return DepthMappingResult(roi_index=1, window=window, step=step, profile=vals.tolist())
+    prof = []
+    for i in range(0, len(vals) - window + 1, max(1, step)):
+        prof.append(float(np.mean(vals[i:i+window])))
+    return DepthMappingResult(roi_index=1, window=window, step=step, profile=prof)

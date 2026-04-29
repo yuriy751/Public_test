@@ -28,8 +28,9 @@ from PyQt6.QtWidgets import (
 from .export_service import export_results
 from .gallery_model import GalleryStore
 from .mut_service import MuTConfig, choose_refractive_index
+from .parameters_service import calculate_parameters_from_table
 from .processing_service import run_boundaries_for_image
-from .results_service import calculate_results
+from .results_service import calculate_results, depth_mapping
 from .results_tables import ResultsTabs
 from .state_machine import GalleryUiState
 
@@ -45,6 +46,7 @@ class MainWindow(QMainWindow):
         self.calculated_results = []
         self.gallery_store = GalleryStore(Path.cwd() / "qt6_projects")
         self.current_gallery_id = None
+        self.auto_refractive_index = None
 
         self._build_ui()
         self._apply_origin_style()
@@ -330,7 +332,8 @@ class MainWindow(QMainWindow):
             return
         self.results_tabs.load_results(self.calculated_results)
         self.workspace_tabs.setCurrentIndex(1)
-        self._notify(f"Intensity processing done for {len(self.calculated_results)} image(s)")
+        dm = depth_mapping(self.calculated_results[0].mean_intensity_by_roi, window=2, step=1)
+        self._notify(f"Intensity done for {len(self.calculated_results)} image(s); depth profile points={len(dm.profile)}")
 
     def _run_mu_t(self) -> None:
         if not self.state.boundaries_ready:
@@ -352,7 +355,7 @@ class MainWindow(QMainWindow):
             mode = choice
 
         manual_n = None
-        auto_n = 1.38  # placeholder until parameters module computes mean n
+        auto_n = self.auto_refractive_index
 
         if mode == "manual" or self.state.boundaries_count <= 1 or not self.state.last_boundary_is_object_end:
             text, ok = QInputDialog.getText(self, "Manual n", "Enter refractive index n:", QLineEdit.EchoMode.Normal, "1.38")
@@ -381,12 +384,25 @@ class MainWindow(QMainWindow):
         self._notify(f"Mu_t ready: n={decision.use_refractive_index:.4f} ({decision.source})")
 
     def _run_parameters(self) -> None:
-        if not self.calculated_results:
-            self._notify("Run intensity processing first")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select parameters input table",
+            str(Path.cwd()),
+            "Tables (*.csv)",
+        )
+        if not path:
+            self._notify("Parameters canceled")
             return
-        lines = sum(len(r.boundary_stats) for r in self.calculated_results)
-        pairs = sum(len(r.thickness_stats) for r in self.calculated_results)
-        self._notify(f"Parameters calculated: boundary rows={lines}, thickness rows={pairs}")
+        try:
+            result = calculate_parameters_from_table(path)
+        except Exception as e:
+            self._notify(f"Parameters failed: {e}")
+            return
+
+        self.auto_refractive_index = result.mean_refractive_index
+        self._notify(
+            f"Parameters ({result.mode}) done: rows={result.rows}, mean n={result.mean_refractive_index:.4f}"
+        )
 
     def _export_results(self) -> None:
         if not self.calculated_results:
