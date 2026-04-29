@@ -16,6 +16,8 @@ from PyQt6.QtWidgets import (
     QSlider,
     QSpinBox,
     QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -34,6 +36,18 @@ class RoiControls:
     y1: QSlider
     y2: QSlider
     segments: QSpinBox
+
+
+@dataclass(slots=True)
+class BoundaryControls:
+    load_images: QPushButton
+    show_image: QPushButton
+    prev_image: QPushButton
+    next_image: QPushButton
+    refresh_image: QPushButton
+    refresh_table: QPushButton
+    optical_thickness: QPushButton
+    table: QTableWidget
 
 
 class MainWindow(QMainWindow):
@@ -55,7 +69,7 @@ class MainWindow(QMainWindow):
 
     def _build_tabs(self) -> None:
         self.tabs.addTab(self._build_roi_tab(), "ROI")
-        self.tabs.addTab(self._placeholder_tab("Boundary calculation"), "Boundary calculation")
+        self.tabs.addTab(self._build_boundary_tab(), "Boundary calculation")
         self.tabs.addTab(self._placeholder_tab("Mu_s calculation"), "Mu_s calculation")
         self.tabs.addTab(self._placeholder_tab("Average intensity calculation"), "Average intensity calculation")
         self.tabs.addTab(self._placeholder_tab("Graphs drawing"), "Graphs drawing")
@@ -113,17 +127,84 @@ class MainWindow(QMainWindow):
         layout.addLayout(actions_row)
         layout.addWidget(processing_log, 1)
 
-        self.roi = RoiControls(
-            x_enabled=x_enabled,
-            y_enabled=y_enabled,
-            x1=x1,
-            x2=x2,
-            y1=y1,
-            y2=y2,
-            segments=segments,
-        )
+        self.roi = RoiControls(x_enabled, y_enabled, x1, x2, y1, y2, segments)
         self._wire_roi_state()
         return tab
+
+    def _build_boundary_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        image_controls = QHBoxLayout()
+        load_images = QPushButton("Load images")
+        show_image = QPushButton("Show")
+        prev_image = QPushButton("Prev")
+        next_image = QPushButton("Next")
+        refresh_image = QPushButton("Refresh")
+
+        image_controls.addWidget(load_images)
+        image_controls.addWidget(show_image)
+        image_controls.addWidget(prev_image)
+        image_controls.addWidget(next_image)
+        image_controls.addWidget(refresh_image)
+        image_controls.addStretch(1)
+
+        boundary_table = QTableWidget(0, 7)
+        boundary_table.setHorizontalHeaderLabels(
+            [
+                "N",
+                "Med Pixel Pos",
+                "Min Pixel Pos",
+                "Max Pixel Pos",
+                "Med Distance",
+                "Min Distance",
+                "Max Distance",
+            ]
+        )
+
+        table_actions = QHBoxLayout()
+        refresh_table = QPushButton("Refresh table")
+        optical_thickness = QPushButton("Optical thickness")
+        table_actions.addWidget(refresh_table)
+        table_actions.addWidget(optical_thickness)
+        table_actions.addStretch(1)
+
+        plot_placeholder = QTextEdit()
+        plot_placeholder.setReadOnly(True)
+        plot_placeholder.setPlaceholderText("Optical thickness plot area (Qt plot binding step)")
+
+        layout.addLayout(image_controls)
+        layout.addWidget(boundary_table, 1)
+        layout.addLayout(table_actions)
+        layout.addWidget(plot_placeholder, 1)
+
+        self.boundary = BoundaryControls(
+            load_images,
+            show_image,
+            prev_image,
+            next_image,
+            refresh_image,
+            refresh_table,
+            optical_thickness,
+            boundary_table,
+        )
+        self._seed_boundary_table()
+        return tab
+
+    def _seed_boundary_table(self) -> None:
+        if not STATE.boundaries.global_x_min:
+            return
+
+        rows = len(STATE.boundaries.global_x_min)
+        self.boundary.table.setRowCount(rows)
+        for i in range(rows):
+            self.boundary.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
+            self.boundary.table.setItem(i, 1, QTableWidgetItem(""))
+            self.boundary.table.setItem(i, 2, QTableWidgetItem(str(STATE.boundaries.global_x_min[i])))
+            self.boundary.table.setItem(i, 3, QTableWidgetItem(str(STATE.boundaries.global_x_max[i])))
+            self.boundary.table.setItem(i, 4, QTableWidgetItem(""))
+            self.boundary.table.setItem(i, 5, QTableWidgetItem(""))
+            self.boundary.table.setItem(i, 6, QTableWidgetItem(""))
 
     @staticmethod
     def _make_slider(minimum: int, maximum: int) -> QSlider:
