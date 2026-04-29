@@ -4,6 +4,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QComboBox,
+    QInputDialog,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -19,6 +21,8 @@ from PyQt6.QtWidgets import (
 )
 
 from .export_service import export_results
+from .gallery_model import GalleryStore
+from .results_tables import ResultsTabs
 from .processing_service import run_boundaries_for_image
 from .results_service import calculate_results
 from .state_machine import GalleryUiState
@@ -33,6 +37,8 @@ class MainWindow(QMainWindow):
         self.state = GalleryUiState()
         self.boundary_outputs = []
         self.calculated_results = []
+        self.gallery_store = GalleryStore(Path.cwd() / "qt6_projects")
+        self.current_gallery_id = None
         self._build_ui()
         self._refresh_buttons()
 
@@ -52,6 +58,16 @@ class MainWindow(QMainWindow):
         row.addWidget(self.delete_btn)
         row.addWidget(self.process_btn)
         row.addWidget(self.export_btn)
+
+        gallery_row = QHBoxLayout()
+        layout.addLayout(gallery_row)
+        self.gallery_combo = QComboBox()
+        self.new_gallery_btn = QPushButton("New gallery")
+        self.rename_gallery_btn = QPushButton("Rename gallery")
+        gallery_row.addWidget(QLabel("Gallery:"))
+        gallery_row.addWidget(self.gallery_combo)
+        gallery_row.addWidget(self.new_gallery_btn)
+        gallery_row.addWidget(self.rename_gallery_btn)
 
         row2 = QHBoxLayout()
         layout.addLayout(row2)
@@ -91,11 +107,17 @@ class MainWindow(QMainWindow):
         self.images.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         layout.addWidget(self.images)
 
+        self.results_tabs = ResultsTabs()
+        layout.addWidget(self.results_tabs)
+
         self.info = QLabel("Pilot state: gallery flow and button gating")
         self.info.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self.info)
 
         self.load_btn.clicked.connect(self._load_images)
+        self.new_gallery_btn.clicked.connect(self._new_gallery)
+        self.rename_gallery_btn.clicked.connect(self._rename_gallery)
+        self.gallery_combo.currentIndexChanged.connect(self._switch_gallery)
         self.delete_btn.clicked.connect(self._delete_selected)
         self.process_btn.clicked.connect(self._add_to_processing)
         self.export_btn.clicked.connect(self._export_results)
@@ -107,6 +129,34 @@ class MainWindow(QMainWindow):
 
         self.images.itemSelectionChanged.connect(self._on_selection_changed)
 
+    def _new_gallery(self) -> None:
+        gallery = self.gallery_store.create_gallery()
+        self.gallery_combo.addItem(gallery.name, gallery.gallery_id)
+        self.gallery_combo.setCurrentIndex(self.gallery_combo.count() - 1)
+
+    def _rename_gallery(self) -> None:
+        if self.current_gallery_id is None:
+            self._notify("Create/select gallery first")
+            return
+        text, ok = QInputDialog.getText(self, "Rename gallery", "New name:")
+        if not ok:
+            return
+        self.gallery_store.rename_gallery(self.current_gallery_id, text)
+        idx = self.gallery_combo.currentIndex()
+        g = self.gallery_store.get(self.current_gallery_id)
+        if g is not None:
+            self.gallery_combo.setItemText(idx, g.name)
+
+    def _switch_gallery(self) -> None:
+        gid = self.gallery_combo.currentData()
+        self.current_gallery_id = gid
+        self.images.clear()
+        g = self.gallery_store.get(gid) if gid is not None else None
+        if g is None:
+            return
+        for p in g.images:
+            self.images.addItem(QListWidgetItem(p))
+
     def _notify(self, text: str) -> None:
         self.info.setText(text)
 
@@ -117,8 +167,13 @@ class MainWindow(QMainWindow):
             str(Path.cwd()),
             "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)",
         )
+        if self.current_gallery_id is None:
+            self._new_gallery()
+        g = self.gallery_store.get(self.current_gallery_id)
         for f in files:
             self.images.addItem(QListWidgetItem(f))
+            if g is not None and f not in g.images:
+                g.images.append(f)
         self.state.has_images = self.images.count() > 0
         self.state.has_selected_images = len(self.images.selectedItems()) > 0
         if not self.state.has_images:
@@ -126,8 +181,12 @@ class MainWindow(QMainWindow):
         self._refresh_buttons()
 
     def _delete_selected(self) -> None:
+        g = self.gallery_store.get(self.current_gallery_id) if self.current_gallery_id is not None else None
         for item in self.images.selectedItems():
+            text = item.text()
             self.images.takeItem(self.images.row(item))
+            if g is not None and text in g.images:
+                g.images.remove(text)
 
         self.state.has_images = self.images.count() > 0
         self.state.has_selected_images = len(self.images.selectedItems()) > 0
@@ -208,6 +267,7 @@ class MainWindow(QMainWindow):
         if not self.calculated_results:
             self._notify("Intensity processing failed")
             return
+        self.results_tabs.load_results(self.calculated_results)
         self._notify(f"Intensity processing done for {len(self.calculated_results)} image(s)")
 
     def _run_parameters(self) -> None:
