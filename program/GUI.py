@@ -2,25 +2,14 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtGui import QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QPushButton,
-    QSlider,
-    QSpinBox,
-    QTabWidget,
-    QTableWidget,
-    QTableWidgetItem,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
+    QApplication, QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QMainWindow, QPushButton, QSlider, QSpinBox, QTabWidget, QTableWidget,
+    QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from .state import STATE
@@ -36,287 +25,116 @@ class RoiControls:
     y1: QSlider
     y2: QSlider
     segments: QSpinBox
+    image_view: QLabel
+    log: QTextEdit
 
 
-@dataclass(slots=True)
-class BoundaryControls:
-    load_images: QPushButton
-    show_image: QPushButton
-    prev_image: QPushButton
-    next_image: QPushButton
-    refresh_image: QPushButton
-    refresh_table: QPushButton
-    optical_thickness: QPushButton
-    table: QTableWidget
-
-
-
-
-@dataclass(slots=True)
-class MuSControls:
-    wavelength: QSpinBox
-    focus_position: QSpinBox
-    omega: QSlider
-    load_images: QPushButton
-    show_image: QPushButton
-    prev_image: QPushButton
-    next_image: QPushButton
-    focus_line: QPushButton
-    table: QTableWidget
-
-
-@dataclass(slots=True)
-class AverageControls:
-    refresh_table: QPushButton
-    plot: QPushButton
-    table: QTableWidget
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("New File")
         self.setMinimumSize(1700, 930)
         self.resize(1700, 950)
+        self._base_pixmap: QPixmap | None = None
 
         root = QWidget(self)
         root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(8, 8, 8, 8)
-
         self.tabs = QTabWidget(root)
         root_layout.addWidget(self.tabs)
         self.setCentralWidget(root)
 
-        self._build_tabs()
-
-    def _build_tabs(self) -> None:
         self.tabs.addTab(self._build_roi_tab(), "ROI")
-        self.tabs.addTab(self._build_boundary_tab(), "Boundary calculation")
-        self.tabs.addTab(self._build_mu_s_tab(), "Mu_s calculation")
-        self.tabs.addTab(self._build_average_tab(), "Average intensity calculation")
-        self.tabs.addTab(self._placeholder_tab("Graphs drawing"), "Graphs drawing")
-        self.tabs.addTab(self._placeholder_tab("Save CSV"), "Save CSV")
-        self.tabs.addTab(self._placeholder_tab("Processing photos"), "Processing photos")
-        self.tabs.addTab(self._placeholder_tab("Processed photos"), "Processed photos")
+        self.tabs.addTab(self._placeholder_tab("Boundary calculation"), "Boundary calculation")
+        self.tabs.addTab(self._placeholder_tab("Mu_s calculation"), "Mu_s calculation")
+        self.tabs.addTab(self._placeholder_tab("Average intensity calculation"), "Average intensity calculation")
 
     def _build_roi_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
-
         controls_box = QGroupBox("ROI controls")
         controls_grid = QGridLayout(controls_box)
 
-        x_enabled = QCheckBox("Enable X")
-        y_enabled = QCheckBox("Enable Y")
-
         max_w = int(STATE.constants.original_width)
         max_h = int(STATE.constants.original_height)
+        x_enabled = QCheckBox("Enable X")
+        y_enabled = QCheckBox("Enable Y")
+        x1, x2 = self._make_slider(0, max_w), self._make_slider(0, max_w)
+        y1, y2 = self._make_slider(0, max_h), self._make_slider(0, max_h)
+        segments = QSpinBox(); segments.setRange(1, 1000); segments.setValue(INPUT_DEFAULTS.segments)
 
-        x1 = self._make_slider(0, max_w)
-        x2 = self._make_slider(0, max_w)
-        y1 = self._make_slider(0, max_h)
-        y2 = self._make_slider(0, max_h)
+        controls_grid.addWidget(x_enabled, 0, 0); controls_grid.addWidget(QLabel("X1"), 0, 1); controls_grid.addWidget(x1, 0, 2)
+        controls_grid.addWidget(QLabel("X2"), 1, 1); controls_grid.addWidget(x2, 1, 2)
+        controls_grid.addWidget(y_enabled, 2, 0); controls_grid.addWidget(QLabel("Y1"), 2, 1); controls_grid.addWidget(y1, 2, 2)
+        controls_grid.addWidget(QLabel("Y2"), 3, 1); controls_grid.addWidget(y2, 3, 2)
+        controls_grid.addWidget(QLabel("Shift"), 4, 1); controls_grid.addWidget(segments, 4, 2)
 
-        segments = QSpinBox()
-        segments.setRange(1, 1000)
-        segments.setValue(INPUT_DEFAULTS.segments)
-
-        controls_grid.addWidget(x_enabled, 0, 0)
-        controls_grid.addWidget(QLabel("X1"), 0, 1)
-        controls_grid.addWidget(x1, 0, 2)
-        controls_grid.addWidget(QLabel("X2"), 1, 1)
-        controls_grid.addWidget(x2, 1, 2)
-
-        controls_grid.addWidget(y_enabled, 2, 0)
-        controls_grid.addWidget(QLabel("Y1"), 2, 1)
-        controls_grid.addWidget(y1, 2, 2)
-        controls_grid.addWidget(QLabel("Y2"), 3, 1)
-        controls_grid.addWidget(y2, 3, 2)
-        controls_grid.addWidget(QLabel("Shift"), 4, 1)
-        controls_grid.addWidget(segments, 4, 2)
-
-        actions_row = QHBoxLayout()
-        process_btn = QPushButton("Process images")
-        process_btn.setEnabled(False)
-        actions_row.addWidget(process_btn)
-        actions_row.addStretch(1)
-
-        processing_log = QTextEdit()
-        processing_log.setReadOnly(True)
-        processing_log.setPlaceholderText("Processing log will appear here...")
-
-        layout.addWidget(controls_box)
-        layout.addLayout(actions_row)
-        layout.addWidget(processing_log, 1)
-
-        self.roi = RoiControls(x_enabled, y_enabled, x1, x2, y1, y2, segments)
-        self._wire_roi_state()
-        return tab
-
-    def _build_boundary_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        image_controls = QHBoxLayout()
-        load_images = QPushButton("Load images")
-        show_image = QPushButton("Show")
-        prev_image = QPushButton("Prev")
-        next_image = QPushButton("Next")
-        refresh_image = QPushButton("Refresh")
-
-        image_controls.addWidget(load_images)
-        image_controls.addWidget(show_image)
-        image_controls.addWidget(prev_image)
-        image_controls.addWidget(next_image)
-        image_controls.addWidget(refresh_image)
-        image_controls.addStretch(1)
-
-        boundary_table = QTableWidget(0, 7)
-        boundary_table.setHorizontalHeaderLabels(
-            [
-                "N",
-                "Med Pixel Pos",
-                "Min Pixel Pos",
-                "Max Pixel Pos",
-                "Med Distance",
-                "Min Distance",
-                "Max Distance",
-            ]
-        )
-
-        table_actions = QHBoxLayout()
-        refresh_table = QPushButton("Refresh table")
-        optical_thickness = QPushButton("Optical thickness")
-        table_actions.addWidget(refresh_table)
-        table_actions.addWidget(optical_thickness)
-        table_actions.addStretch(1)
-
-        plot_placeholder = QTextEdit()
-        plot_placeholder.setReadOnly(True)
-        plot_placeholder.setPlaceholderText("Optical thickness plot area (Qt plot binding step)")
-
-        layout.addLayout(image_controls)
-        layout.addWidget(boundary_table, 1)
-        layout.addLayout(table_actions)
-        layout.addWidget(plot_placeholder, 1)
-
-        self.boundary = BoundaryControls(
-            load_images,
-            show_image,
-            prev_image,
-            next_image,
-            refresh_image,
-            refresh_table,
-            optical_thickness,
-            boundary_table,
-        )
-        self._seed_boundary_table()
-        return tab
-
-    def _seed_boundary_table(self) -> None:
-        if not STATE.boundaries.global_x_min:
-            return
-
-        rows = len(STATE.boundaries.global_x_min)
-        self.boundary.table.setRowCount(rows)
-        for i in range(rows):
-            self.boundary.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
-            self.boundary.table.setItem(i, 1, QTableWidgetItem(""))
-            self.boundary.table.setItem(i, 2, QTableWidgetItem(str(STATE.boundaries.global_x_min[i])))
-            self.boundary.table.setItem(i, 3, QTableWidgetItem(str(STATE.boundaries.global_x_max[i])))
-            self.boundary.table.setItem(i, 4, QTableWidgetItem(""))
-            self.boundary.table.setItem(i, 5, QTableWidgetItem(""))
-            self.boundary.table.setItem(i, 6, QTableWidgetItem(""))
-
-
-    def _build_mu_s_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        top = QHBoxLayout()
-        wavelength = QSpinBox()
-        wavelength.setRange(1, 100000)
-        wavelength.setValue(int(INPUT_DEFAULTS.wavelength))
-        focus_position = QSpinBox()
-        focus_position.setRange(-100000, 100000)
-        focus_position.setValue(int(INPUT_DEFAULTS.focus_position))
-        omega = self._make_slider(0, 1000)
-        omega.setValue(int(INPUT_DEFAULTS.omega * 100))
-
-        top.addWidget(QLabel("Wavelength, nm"))
-        top.addWidget(wavelength)
-        top.addWidget(QLabel("Focus position in air, pixel"))
-        top.addWidget(focus_position)
-        top.addWidget(QLabel("Omega x100"))
-        top.addWidget(omega)
-
-        img_actions = QHBoxLayout()
-        load_images = QPushButton("Load images")
-        show_image = QPushButton("Show")
-        prev_image = QPushButton("Previous image")
-        next_image = QPushButton("Next image")
-        focus_line = QPushButton("Focus line")
-        for b in (load_images, show_image, prev_image, next_image, focus_line):
-            img_actions.addWidget(b)
-        img_actions.addStretch(1)
-
-        table = QTableWidget(0, 3)
-        table.setHorizontalHeaderLabels(["N", "mu_s 1/mm", "mu_s (std) 1/mm"])
-
-        plot_placeholder = QTextEdit()
-        plot_placeholder.setReadOnly(True)
-        plot_placeholder.setPlaceholderText("Mu_s plot area (Qt plot binding step)")
-
-        layout.addLayout(top)
-        layout.addLayout(img_actions)
-        layout.addWidget(table, 1)
-        layout.addWidget(plot_placeholder, 1)
-
-        self.mu_s = MuSControls(wavelength, focus_position, omega, load_images, show_image, prev_image, next_image, focus_line, table)
-        return tab
-
-    def _build_average_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+        image_view = QLabel("No image loaded")
+        image_view.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image_view.setMinimumHeight(420)
+        image_view.setStyleSheet("border: 1px solid #666;")
 
         actions = QHBoxLayout()
-        refresh_table = QPushButton("Refresh table")
-        plot = QPushButton("Plot")
-        actions.addWidget(refresh_table)
-        actions.addWidget(plot)
-        actions.addStretch(1)
+        load_preview = QPushButton("Load first project image")
+        process_btn = QPushButton("Process images")
+        process_btn.setEnabled(False)
+        actions.addWidget(load_preview); actions.addWidget(process_btn); actions.addStretch(1)
 
-        table = QTableWidget(0, 3)
-        table.setHorizontalHeaderLabels(["N", "Av int (med), pixel value", "Av int (std), pixel value"])
+        log = QTextEdit(); log.setReadOnly(True)
 
-        plot_placeholder = QTextEdit()
-        plot_placeholder.setReadOnly(True)
-        plot_placeholder.setPlaceholderText("Average intensity plot area (Qt plot binding step)")
-
+        layout.addWidget(controls_box)
         layout.addLayout(actions)
-        layout.addWidget(table, 1)
-        layout.addWidget(plot_placeholder, 1)
+        layout.addWidget(image_view, 1)
+        layout.addWidget(log, 1)
 
-        self.average = AverageControls(refresh_table, plot, table)
+        self.roi = RoiControls(x_enabled, y_enabled, x1, x2, y1, y2, segments, image_view, log)
+        self._wire_roi_state(load_preview)
         return tab
+
+    def _wire_roi_state(self, load_preview_btn: QPushButton) -> None:
+        self.roi.x1.valueChanged.connect(self._update_roi_preview)
+        self.roi.x2.valueChanged.connect(self._update_roi_preview)
+        self.roi.y1.valueChanged.connect(self._update_roi_preview)
+        self.roi.y2.valueChanged.connect(self._update_roi_preview)
+        load_preview_btn.clicked.connect(self._load_first_image_preview)
+
+    def _load_first_image_preview(self) -> None:
+        items = STATE.gallery.image_items
+        if not items:
+            self.roi.log.append("No images in STATE.gallery.image_items")
+            return
+        first_path = Path(items[0].get("path", ""))
+        if not first_path.exists():
+            self.roi.log.append(f"Image does not exist: {first_path}")
+            return
+        pix = QPixmap(str(first_path))
+        if pix.isNull():
+            self.roi.log.append(f"Cannot load image: {first_path}")
+            return
+
+        self._base_pixmap = pix
+        self.roi.log.append(f"Loaded image: {first_path.name}")
+        self._update_roi_preview()
+
+    def _update_roi_preview(self) -> None:
+        if self._base_pixmap is None:
+            return
+        pix = self._base_pixmap.copy()
+        p = QPainter(pix)
+        p.setPen(QPen(Qt.GlobalColor.red, 2))
+        x1, x2 = sorted((self.roi.x1.value(), self.roi.x2.value()))
+        y1, y2 = sorted((self.roi.y1.value(), self.roi.y2.value()))
+        p.drawRect(QRect(x1, y1, max(1, x2 - x1), max(1, y2 - y1)))
+        p.end()
+        self.roi.image_view.setPixmap(pix.scaled(self.roi.image_view.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
     @staticmethod
     def _make_slider(minimum: int, maximum: int) -> QSlider:
-        slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setRange(minimum, maximum)
-        return slider
+        slider = QSlider(Qt.Orientation.Horizontal); slider.setRange(minimum, maximum); return slider
 
     @staticmethod
     def _placeholder_tab(title: str) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        label = QLabel(f"{title} UI is being migrated to PyQt6.")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
-        return tab
-
-    def _wire_roi_state(self) -> None:
-        # This method is a dedicated extension point for wiring existing
-        # computational callbacks to Qt signals during migration.
-        pass
+        tab = QWidget(); lay = QVBoxLayout(tab); lab = QLabel(f"{title} UI is being migrated to PyQt6.")
+        lab.setAlignment(Qt.AlignmentFlag.AlignCenter); lay.addWidget(lab); return tab
 
 
 def _ensure_state_defaults() -> None:
@@ -326,6 +144,4 @@ def _ensure_state_defaults() -> None:
 def gui() -> None:
     _ensure_state_defaults()
     app = QApplication.instance() or QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    app.exec()
+    window = MainWindow(); window.show(); app.exec()
