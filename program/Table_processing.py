@@ -36,7 +36,10 @@ def boundaries_searching_npy(folder: Path, files_name: list[str]):
             boundary_idx_mass = np.asarray(STATE.constants.colourmap[boundary_idx])
             mask_exact = np.all(img == boundary_idx_mass, axis=2)
             y, x = np.where(mask_exact)
-            in_.append(y)
+            in_.append({
+                "x": x.tolist(),
+                "y": y.tolist()
+            })
 
             if len(x) > 0:
                 STATE.boundaries.global_x_min.append(np.min(x).tolist())
@@ -46,6 +49,44 @@ def boundaries_searching_npy(folder: Path, files_name: list[str]):
         k += 1
 
     return out_list
+
+
+def _boundary_to_xy(boundary) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Нормализует представление границы в (x, y).
+
+    Поддержка:
+    - legacy: np.ndarray/list только с y
+    - new: dict {'x': [...], 'y': [...]}
+    """
+    if isinstance(boundary, dict):
+        x = np.asarray(boundary.get("x", []))
+        y = np.asarray(boundary.get("y", []))
+        return x, y
+
+    y = np.asarray(boundary)
+    x = np.arange(len(y))
+    return x, y
+
+
+def _aligned_diff(boundary_a, boundary_b) -> np.ndarray:
+    """
+    Возвращает |y_b - y_a| для совпадающих x-координат.
+    """
+    x_a, y_a = _boundary_to_xy(boundary_a)
+    x_b, y_b = _boundary_to_xy(boundary_b)
+
+    if len(x_a) == 0 or len(x_b) == 0:
+        return np.array([])
+
+    common_x = np.intersect1d(x_a, x_b)
+    if len(common_x) == 0:
+        return np.array([])
+
+    map_a = {int(x): float(y) for x, y in zip(x_a, y_a)}
+    map_b = {int(x): float(y) for x, y in zip(x_b, y_b)}
+
+    return np.asarray([abs(map_b[int(x)] - map_a[int(x)]) for x in common_x], dtype=float)
 
 
 def distances_function(in_list: list):
@@ -77,13 +118,17 @@ def distances_function(in_list: list):
         m_tot, min_tot, max_tot = np.nan, np.nan, np.nan
 
         # 1. Отбор и сортировка (Верх -> Низ)
-        present_boundaries = [b for b in in_list[i] if len(b) > 0]
+        present_boundaries = []
+        for b in in_list[i]:
+            _, y = _boundary_to_xy(b)
+            if len(y) > 0:
+                present_boundaries.append(b)
         # Важно: Сортировка по медиане Y, чтобы порядок границ был правильным (сверху вниз)
-        present_boundaries.sort(key=lambda b: np.median(b))
+        present_boundaries.sort(key=lambda b: np.median(_boundary_to_xy(b)[1]))
 
         # 2. Обработка ПОЗИЦИЙ (Positions)
         for bound in present_boundaries:
-            arr = np.asarray(bound)
+            _, arr = _boundary_to_xy(bound)
 
             # Статистика
             med_pixel_position_in.append(np.median(arr).item())
@@ -99,15 +144,9 @@ def distances_function(in_list: list):
         if len(present_boundaries) > 1:
             # А) Последовательные дистанции (1-2, 2-3...)
             for v in range(1, len(present_boundaries)):
-                arr_curr = np.asarray(present_boundaries[v])
-                arr_prev = np.asarray(present_boundaries[v - 1])
+                diff = _aligned_diff(present_boundaries[v - 1], present_boundaries[v])
 
-                # Обрезаем по минимальной длине, чтобы вычесть массивы
-                slice_ = min(len(arr_curr), len(arr_prev))
-
-                if slice_ > 0:
-                    diff = np.abs(arr_curr[:slice_] - arr_prev[:slice_])
-
+                if len(diff) > 0:
                     # Статистика
                     med_distance_in.append(np.median(diff).item())
                     min_distance_in.append(np.min(diff).item())
@@ -122,12 +161,8 @@ def distances_function(in_list: list):
                     raw_distance_in.append([])  # Пустой список, если нет перекрытия
 
             # Б) ОБЩАЯ толщина (Самая нижняя - Самая верхняя)
-            arr_first = np.asarray(present_boundaries[0])
-            arr_last = np.asarray(present_boundaries[-1])
-
-            slice_total = min(len(arr_first), len(arr_last))
-            if slice_total > 0:
-                diff_total = np.abs(arr_last[:slice_total] - arr_first[:slice_total])
+            diff_total = _aligned_diff(present_boundaries[0], present_boundaries[-1])
+            if len(diff_total) > 0:
                 m_tot = np.median(diff_total).item()
                 min_tot = np.min(diff_total).item()
                 max_tot = np.max(diff_total).item()
