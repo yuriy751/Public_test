@@ -136,6 +136,8 @@ def text_fields_update():
 
 
 def new_project_call_back():
+    # Сбрасываем title сразу, чтобы при ранних ошибках не оставался временный/неверный заголовок.
+    dpg.set_viewport_title('New File')
     state_update()
     update_roi_lines()
     input_fields_update()
