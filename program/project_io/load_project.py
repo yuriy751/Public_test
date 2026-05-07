@@ -164,3 +164,6 @@ def open_project(sender, app_data, user_data) -> None:
         default_path=str(STATE.settings.last_open_folder),
         show=False
     )
+
+    # Заголовок окна должен соответствовать открытому файлу проекта.
+    dpg.set_viewport_title(selected_path.name)
