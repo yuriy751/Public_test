@@ -102,68 +102,76 @@ def open_project(sender, app_data, user_data) -> None:
     selected_path = Path(app_data["file_path_name"])
     project_dir = selected_path.parent
     extract_dir = project_dir / "__opened_project__"
+    try:
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        extract_dir.mkdir(parents=True, exist_ok=True)
 
-    if extract_dir.exists():
-        shutil.rmtree(extract_dir)
-    extract_dir.mkdir(parents=True, exist_ok=True)
+        new_project_call_back()
 
-    new_project_call_back()
+        with ZipFile(selected_path, "r") as zipf:
+            zipf.extractall(extract_dir)
 
-    with ZipFile(selected_path, "r") as zipf:
-        zipf.extractall(extract_dir)
+        STATE.project.fs = ProjectFS(root=extract_dir, octp_file=selected_path.name)
+        STATE.project.fs.ensure_structure()
 
-    STATE.project.fs = ProjectFS(root=extract_dir, octp_file=selected_path.name)
-    STATE.project.fs.ensure_structure()
+        for folder_fn in (
+            STATE.project.fs.main_images,
+            STATE.project.fs.images_for_processing,
+            STATE.project.fs.images_with_boundaries,
+            STATE.project.fs.mu_s_images,
+        ):
+            _restore_image_bundle(folder_fn())
 
-    for folder_fn in (
-        STATE.project.fs.main_images,
-        STATE.project.fs.images_for_processing,
-        STATE.project.fs.images_with_boundaries,
-        STATE.project.fs.mu_s_images,
-    ):
-        _restore_image_bundle(folder_fn())
+        apply_input_fields(_load_json(STATE.project.fs.inputs()))
 
-    apply_input_fields(_load_json(STATE.project.fs.inputs()))
+        _apply_state(STATE.gallery, _load_json(STATE.project.fs.gallery_state()))
+        _apply_state(STATE.gallery_proc, _load_json(STATE.project.fs.gallery_proc_state()))
+        _apply_state(STATE.a_scan, _load_json(STATE.project.fs.a_scan_state()))
+        _apply_state(STATE.mu_s, _load_json(STATE.project.fs.mu_s_state()))
+        _apply_state(STATE.boundaries, _load_json(STATE.project.fs.boundaries_state()))
+        _apply_state(STATE.constants, _load_json(STATE.project.fs.constants_state()))
+        _apply_project_state(_load_json(STATE.project.fs.project_state()))
+        _apply_state(STATE.time, _load_json(STATE.project.fs.time_state()))
+        _apply_state(STATE.average_intensity, _load_json(STATE.project.fs.average_intensity_state()))
 
-    _apply_state(STATE.gallery, _load_json(STATE.project.fs.gallery_state()))
-    _apply_state(STATE.gallery_proc, _load_json(STATE.project.fs.gallery_proc_state()))
-    _apply_state(STATE.a_scan, _load_json(STATE.project.fs.a_scan_state()))
-    _apply_state(STATE.mu_s, _load_json(STATE.project.fs.mu_s_state()))
-    _apply_state(STATE.boundaries, _load_json(STATE.project.fs.boundaries_state()))
-    _apply_state(STATE.constants, _load_json(STATE.project.fs.constants_state()))
-    _apply_project_state(_load_json(STATE.project.fs.project_state()))
-    _apply_state(STATE.time, _load_json(STATE.project.fs.time_state()))
-    _apply_state(STATE.average_intensity, _load_json(STATE.project.fs.average_intensity_state()))
+        widget_state = _load_json(STATE.project.fs.root / "widget_state.json")
+        for tag, enabled in widget_state.get("buttons", {}).items():
+            if dpg.does_item_exist(tag):
+                dpg.enable_item(tag) if enabled else dpg.disable_item(tag)
+        for tag, value in widget_state.get("checkboxes", {}).items():
+            if dpg.does_item_exist(tag):
+                dpg.set_value(tag, value)
+        for tag, value in widget_state.get("sliders", {}).items():
+            if dpg.does_item_exist(tag):
+                dpg.set_value(tag, value)
 
-    widget_state = _load_json(STATE.project.fs.root / "widget_state.json")
-    for tag, enabled in widget_state.get("buttons", {}).items():
-        if dpg.does_item_exist(tag):
-            dpg.enable_item(tag) if enabled else dpg.disable_item(tag)
-    for tag, value in widget_state.get("checkboxes", {}).items():
-        if dpg.does_item_exist(tag):
-            dpg.set_value(tag, value)
-    for tag, value in widget_state.get("sliders", {}).items():
-        if dpg.does_item_exist(tag):
-            dpg.set_value(tag, value)
+        STATE.tables = load_tables(STATE.project.fs.root)
+        process_table_data()
+        update_mu_s_table_gui()
+        update_av_int_table_gui()
 
-    STATE.tables = load_tables(STATE.project.fs.root)
-    process_table_data()
-    update_mu_s_table_gui()
-    update_av_int_table_gui()
+        update_boundary_texture()
+        layout_gallery()
+        layout_boundaries_gallery()
+        load_images_for_boundaries()
+        load_images_mu_s()
 
-    update_boundary_texture()
-    layout_gallery()
-    layout_boundaries_gallery()
-    load_images_for_boundaries()
-    load_images_mu_s()
+        STATE.settings.last_open_folder = str(project_dir)
+        STATE.settings.save()
+        dpg.configure_item(
+            TAGS.dialogs.open_project,
+            default_path=str(STATE.settings.last_open_folder),
+            show=False
+        )
 
-    STATE.settings.last_open_folder = str(project_dir)
-    STATE.settings.save()
-    dpg.configure_item(
-        TAGS.dialogs.open_project,
-        default_path=str(STATE.settings.last_open_folder),
-        show=False
-    )
-
-    # Заголовок окна должен соответствовать открытому файлу проекта.
-    dpg.set_viewport_title(selected_path.name)
+        # Заголовок окна должен соответствовать открытому файлу проекта.
+        dpg.set_viewport_title(selected_path.name)
+    except Exception as e:
+        print(f"[OPEN][ERROR] Failed to open project '{selected_path}': {e}")
+        # Возвращаем UI в консистентное «пустое» состояние вместо частично
+        # инициализированного интерфейса.
+        try:
+            new_project_call_back()
+        except Exception as reset_error:
+            print(f"[OPEN][ERROR] Failed to recover UI after open error: {reset_error}")
