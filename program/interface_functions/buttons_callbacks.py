@@ -1,4 +1,5 @@
 import dearpygui.dearpygui as dpg
+import shutil
 from ..state import STATE
 from ..tags import TAGS
 from ..project_io.save_project import save_project, cleanup_project_folders
@@ -9,6 +10,10 @@ from ..project_io.load_project import show_open_project_dialog
 def quit_():
     if STATE.project.fs.root:
         cleanup_project_folders(STATE.project.fs)
+        # Если проект открыт из временной рабочей директории распаковки,
+        # удаляем её целиком при выходе из приложения.
+        if STATE.project.fs.root.name == "__opened_project__" and STATE.project.fs.root.exists():
+            shutil.rmtree(STATE.project.fs.root, ignore_errors=True)
     dpg.stop_dearpygui()
 
 
