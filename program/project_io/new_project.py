@@ -17,6 +17,23 @@ from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import clear_dynamic_texture, load_images_mu_s
 
 
+def _set_table_template(table_tag: str, headers: list[str]) -> None:
+    """
+    Создаёт шаблон таблицы (колонки + одна пустая строка),
+    чтобы layout интерфейса не «прыгал» при очистке данных.
+    """
+    if not dpg.does_item_exist(table_tag):
+        return
+
+    dpg.delete_item(table_tag, children_only=True)
+    for header in headers:
+        dpg.add_table_column(label=header, parent=table_tag)
+
+    with dpg.table_row(parent=table_tag):
+        for _ in headers:
+            dpg.add_text("-")
+
+
 def input_fields_update():
     tags_dict = TAGS.inputs.__dict__
     default_values_dict = INPUT_DEFAULTS.__dict__
@@ -42,19 +59,29 @@ def button_disabled_update():
 
 
 def tables_update():
-    table_tag = TAGS.tables.boundaries
-    if dpg.does_item_exist(table_tag):
-        dpg.delete_item(table_tag, children_only=True)
     if STATE.tables.boundaries:
         process_table_data()  # корректно пересоберёт таблицу
     else:
-        print("[Delete] Boundaries table cleared.")
+        _set_table_template(
+            TAGS.tables.boundaries,
+            ["N", "Med Pixel Pos", "Min Pixel Pos", "Max Pixel Pos", "Med Distance", "Min Distance", "Max Distance"]
+        )
 
     # Mu_s
     update_mu_s_table_gui()
+    if not STATE.tables.mu_s:
+        _set_table_template(
+            TAGS.tables.mu_s,
+            ["N", "mu_s 1/mm", "mu_s (std) 1/mm"]
+        )
 
     # Average Intensity
     update_av_int_table_gui()
+    if not STATE.tables.av_int:
+        _set_table_template(
+            TAGS.tables.av_int,
+            ["N", "Av int (med), pixel value", "Av int (std), pixel value"]
+        )
 
 
 def state_update():
