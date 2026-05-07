@@ -37,6 +37,19 @@ def _apply_state(obj, data: dict) -> None:
             setattr(obj, key, value)
 
 
+def _apply_project_state(data: dict) -> None:
+    """
+    Аккуратно восстанавливает project_state без потери активного ProjectFS.
+    """
+    if not data:
+        return
+
+    # fs не перезаписываем из JSON-словаря: актуальный fs уже инициализирован
+    # после распаковки и должен остаться объектом ProjectFS.
+    if "modified" in data:
+        STATE.project.modified = bool(data["modified"])
+
+
 def _restore_image_bundle(folder: Path) -> None:
     bundle = folder / "images_bundle.npz"
     if not bundle.exists():
@@ -88,7 +101,7 @@ def open_project(sender, app_data, user_data) -> None:
     _apply_state(STATE.mu_s, _load_json(STATE.project.fs.mu_s_state()))
     _apply_state(STATE.boundaries, _load_json(STATE.project.fs.boundaries_state()))
     _apply_state(STATE.constants, _load_json(STATE.project.fs.constants_state()))
-    _apply_state(STATE.project, _load_json(STATE.project.fs.project_state()))
+    _apply_project_state(_load_json(STATE.project.fs.project_state()))
     _apply_state(STATE.time, _load_json(STATE.project.fs.time_state()))
     _apply_state(STATE.average_intensity, _load_json(STATE.project.fs.average_intensity_state()))
 
