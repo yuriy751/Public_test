@@ -175,6 +175,16 @@ def layout_gallery():
     col = 0
 
     for idx, item in enumerate(STATE.gallery.image_items):
+        tex_tag = item.get("texture")
+        if not tex_tag or not dpg.does_item_exist(tex_tag):
+            # После открытия/пересборки UI временные texture-tag могут быть невалидны.
+            # Пытаемся пересоздать текстуру из файла и обновить item.
+            recreated = load_image_as_texture(item.get("path", ""))
+            if recreated is None or not dpg.does_item_exist(recreated):
+                continue
+            item["texture"] = recreated
+            tex_tag = recreated
+
         selected = idx in STATE.gallery.selected_indices
         tint = (200, 200, 255, 255) if selected else (255, 255, 255, 255)
 
@@ -186,7 +196,7 @@ def layout_gallery():
 
         with dpg.group(parent=row_group):
             dpg.add_image_button(
-                item["texture"],
+                tex_tag,
                 tag=f"img_btn_{idx}",
                 tint_color=tint,
                 callback=image_click_callback,
