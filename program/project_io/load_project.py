@@ -73,8 +73,26 @@ def _restore_image_bundle(folder: Path) -> None:
 
     for name, arr in zip(names, images):
         img_name = str(name)
-        img_array = np.asarray(arr)
-        cv2.imwrite(str(folder / img_name), img_array)
+        img_array = arr
+
+        # np.savez с object-массивами может вернуть вложенные object-структуры.
+        # Аккуратно разворачиваем до валидного ndarray для OpenCV.
+        if isinstance(img_array, np.ndarray) and img_array.dtype == object:
+            if img_array.shape == ():
+                img_array = img_array.item()
+            else:
+                img_array = np.asarray(img_array.tolist())
+
+        img_array = np.asarray(img_array)
+
+        if img_array.dtype == object:
+            print(f"[OPEN][WARN] Skip '{img_name}': unsupported object dtype after restore.")
+            continue
+
+        try:
+            cv2.imwrite(str(folder / img_name), img_array)
+        except Exception as e:
+            print(f"[OPEN][WARN] Failed to restore '{img_name}': {e}")
 
 
 def open_project(sender, app_data, user_data) -> None:
