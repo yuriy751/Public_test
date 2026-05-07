@@ -31,6 +31,20 @@ def _require_project():
         raise RuntimeError("Gallery operation requires an open project")
 
 
+def _set_empty_table_template(table_tag: str) -> None:
+    """
+    Минимальный шаблон таблицы после полного удаления изображений,
+    чтобы таблица визуально не сжималась в ноль.
+    """
+    if not dpg.does_item_exist(table_tag):
+        return
+
+    dpg.delete_item(table_tag, children_only=True)
+    dpg.add_table_column(label="File Name", parent=table_tag)
+    with dpg.table_row(parent=table_tag):
+        dpg.add_text("-")
+
+
 # ============================================================
 # Filesystem helpers (через ProjectFS)
 # ============================================================
@@ -329,13 +343,17 @@ def delete_images():
     if STATE.tables.boundaries:
         process_table_data()  # корректно пересоберёт таблицу
     else:
-        print("[Delete] Boundaries table cleared.")
+        _set_empty_table_template(table_tag)
 
     # Mu_s
     update_mu_s_table_gui()
+    if not STATE.tables.mu_s:
+        _set_empty_table_template(TAGS.tables.mu_s)
 
     # Average Intensity
     update_av_int_table_gui()
+    if not STATE.tables.av_int:
+        _set_empty_table_template(TAGS.tables.av_int)
 
     # ---------- 5. Project state ----------
     # Проверить, остались ли изображения и убрать возможность ставить галочки, а также поменять значения на Flase
@@ -537,4 +555,3 @@ def update_boundary_texture():
     )
 
     dpg.add_alias(TAGS.textures.boundaries, new_id)
-
