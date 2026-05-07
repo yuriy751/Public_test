@@ -103,29 +103,35 @@ def cleanup_project_folders(project_fs: ProjectFS) -> None:
 
 def save_images_as_npz(src: Path, dst: Path) -> None:
     """
-    Конвертирует изображения из папки src в .npz и сохраняет в dst.
+    Конвертирует все изображения из папки src в единый .npz-бандл в dst.
+
+    Это существенно уменьшает количество операций ввода/вывода
+    по сравнению с форматом "один файл .npz на одно изображение".
     """
     if not src.exists():
         return
 
     dst.mkdir(parents=True, exist_ok=True)
 
-    for img_path in src.iterdir():
-        if not img_path.is_file():
-            continue
+    image_files = sorted([p for p in src.iterdir() if p.is_file()])
+    names: list[str] = []
+    images: list[np.ndarray] = []
 
+    for img_path in image_files:
         try:
             arr = load_image_as_array(img_path)
         except Exception as e:
             print(f"[SAVE][WARN] Failed to load {img_path.name}: {e}")
             continue
 
-        np.savez_compressed(
-            dst / img_path.with_suffix(".npz").name,
-            image=arr,
-            dtype=str(arr.dtype),
-            shape=arr.shape,
-        )
+        names.append(img_path.name)
+        images.append(arr)
+
+    np.savez_compressed(
+        dst / "images_bundle.npz",
+        names=np.array(names, dtype=object),
+        images=np.array(images, dtype=object),
+    )
 
 
 
