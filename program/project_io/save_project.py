@@ -127,7 +127,9 @@ def save_images_as_npz(src: Path, dst: Path) -> None:
         names.append(img_path.name)
         images.append(arr)
 
-    np.savez_compressed(
+    # Для ускорения сохранения используем np.savez без дополнительного
+    # CPU-затратного сжатия (компромисс: архив станет больше).
+    np.savez(
         dst / "images_bundle.npz",
         names=np.array(names, dtype=object),
         images=np.array(images, dtype=object),
