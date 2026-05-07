@@ -55,7 +55,8 @@ def button_disabled_update():
                  TAGS.buttons.images_process, TAGS.buttons.image_upload, TAGS.buttons.images_delete,
                  TAGS.buttons.plot_processing, TAGS.buttons.show_boundary_image)
     for tag in tags_dict:
-        dpg.disable_item(tag)
+        if tag and dpg.does_item_exist(tag):
+            dpg.disable_item(tag)
 
 
 def tables_update():
