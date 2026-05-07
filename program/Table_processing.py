@@ -235,12 +235,19 @@ def process_table_data():
         files_to_process
     )
 
-    num_boundaries = 2
+    # Количество столбцов должно соответствовать реальному максимальному
+    # числу найденных границ по выбранным изображениям.
+    num_boundaries = 0
     for b_list in raw_boundaries:
-        present = [b for b in b_list if len(b) > 0]
-        if present:
-            num_boundaries = len(present)
-            break
+        present_count = 0
+        for b in b_list:
+            _, y = _boundary_to_xy(b)
+            if len(y) > 0:
+                present_count += 1
+        num_boundaries = max(num_boundaries, present_count)
+
+    if num_boundaries == 0:
+        num_boundaries = 1
 
     num_distances = max(0, num_boundaries - 1)
 
