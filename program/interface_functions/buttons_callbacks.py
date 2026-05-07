@@ -3,6 +3,7 @@ from ..state import STATE
 from ..tags import TAGS
 from ..project_io.save_project import save_project, cleanup_project_folders
 from ..project_io.new_project import  new_project_call_back
+from ..project_io.load_project import show_open_project_dialog
 
 
 def quit_():
@@ -65,8 +66,7 @@ def on_key_s(sender, app_data):
 
 def on_key_o(sender, app_data):
     if dpg.is_key_down(dpg.mvKey_LControl) and dpg.is_key_down(dpg.mvKey_O):
-        print('on_key_o is called')
-        # open_project()
+        show_open_project_dialog()
 
 
 def on_key_n(sender, app_data):
