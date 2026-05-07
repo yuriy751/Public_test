@@ -22,6 +22,18 @@ from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import load_images_mu_s
 
 
+def show_open_project_dialog() -> None:
+    """
+    Показывает диалог открытия проекта, предварительно синхронизируя
+    путь по последнему открытому проекту из settings.json.
+    """
+    dpg.configure_item(
+        TAGS.dialogs.open_project,
+        default_path=str(STATE.settings.last_open_folder),
+        show=True
+    )
+
+
 def _load_json(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -129,4 +141,8 @@ def open_project(sender, app_data, user_data) -> None:
 
     STATE.settings.last_open_folder = str(project_dir)
     STATE.settings.save()
-    dpg.configure_item(TAGS.dialogs.open_project, default_path=STATE.settings.last_open_folder, show=False)
+    dpg.configure_item(
+        TAGS.dialogs.open_project,
+        default_path=str(STATE.settings.last_open_folder),
+        show=False
+    )

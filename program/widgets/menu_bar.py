@@ -5,7 +5,7 @@ from ..interface_functions.buttons_callbacks import (
     quitting_function, help_function, on_key_q, on_key_s, on_key_o, on_key_n
 )
 from ..project_io.new_project import new_project_call_back
-from ..project_io.load_project import open_project
+from ..project_io.load_project import show_open_project_dialog
 
 
 def menu_bar_func():
@@ -25,7 +25,7 @@ def menu_bar_func():
                               )
             dpg.add_menu_item(label='Open Project (Ctrl + O)',
                               tag=TAGS.menu_items.open_project,
-                              callback=lambda: dpg.show_item(TAGS.dialogs.open_project)
+                              callback=show_open_project_dialog
                               )
             dpg.add_menu_item(label='Save Project (Ctrl + S)',
                               tag=TAGS.menu_items.save,
