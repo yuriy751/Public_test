@@ -65,8 +65,7 @@ def on_key_s(sender, app_data):
 
 def on_key_o(sender, app_data):
     if dpg.is_key_down(dpg.mvKey_LControl) and dpg.is_key_down(dpg.mvKey_O):
-        print('on_key_o is called')
-        # open_project()
+        dpg.show_item(TAGS.dialogs.open_project)
 
 
 def on_key_n(sender, app_data):
