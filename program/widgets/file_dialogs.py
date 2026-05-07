@@ -3,6 +3,7 @@ from ..tags import TAGS
 from ..state import STATE
 from ..Gallery import on_images_selected
 from ..project_io.save_project import save_project_folder_as
+from ..project_io.load_project import open_project
 from ..project_io.save_files.save_files import save_selected_tables
 from ..project_io.save_images.save_images import save_images_to_folder
 
@@ -28,7 +29,7 @@ def last_save_project_folder():
 
 def last_open_folder():
     with dpg.file_dialog(directory_selector=False, show=False,
-                         # callback=open_project,
+                         callback=open_project,
                          tag=TAGS.dialogs.open_project,
                          modal=False, width=600, height=400,
                          default_path=STATE.settings.last_open_folder):

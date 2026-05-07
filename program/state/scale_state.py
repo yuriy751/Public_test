@@ -3,5 +3,5 @@ from dataclasses import dataclass
 
 @dataclass
 class ScaleState:
-    scale: float | None = None
-    window_scale: float | None = None
+    scale: float = 1.0
+    window_scale: float = 1.0
