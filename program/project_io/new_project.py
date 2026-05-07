@@ -21,7 +21,7 @@ def input_fields_update():
     tags_dict = TAGS.inputs.__dict__
     default_values_dict = INPUT_DEFAULTS.__dict__
     for key, tag in tags_dict.items():
-        if default_values_dict.get(key) and dpg.does_item_exist(tag):
+        if key in default_values_dict and dpg.does_item_exist(tag):
             dpg.set_value(tag, default_values_dict[key])
 
 
@@ -109,6 +109,7 @@ def text_fields_update():
 
 
 def new_project_call_back():
+    state_update()
     update_roi_lines()
     input_fields_update()
     sliders_update()
@@ -116,7 +117,6 @@ def new_project_call_back():
     checkboxes_update()
     text_fields_update()
     tables_update()
-    state_update()
     galleries_update()
     graphics_update()
     windows_update()
