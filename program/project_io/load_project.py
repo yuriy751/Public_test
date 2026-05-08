@@ -49,6 +49,19 @@ def _apply_state(obj, data: dict) -> None:
             setattr(obj, key, value)
 
 
+def _restore_set_fields(obj, field_names: tuple[str, ...]) -> None:
+    """
+    После JSON-десериализации возвращает list -> set
+    для полей, которые в runtime должны быть set.
+    """
+    for name in field_names:
+        if not hasattr(obj, name):
+            continue
+        value = getattr(obj, name)
+        if isinstance(value, list):
+            setattr(obj, name, set(value))
+
+
 def _apply_project_state(data: dict) -> None:
     """
     Аккуратно восстанавливает project_state без потери активного ProjectFS.
@@ -127,6 +140,8 @@ def open_project(sender, app_data, user_data) -> None:
 
         _apply_state(STATE.gallery, _load_json(STATE.project.fs.gallery_state()))
         _apply_state(STATE.gallery_proc, _load_json(STATE.project.fs.gallery_proc_state()))
+        _restore_set_fields(STATE.gallery, ("selected_indices",))
+        _restore_set_fields(STATE.gallery_proc, ("selected_indices", "final_boundaries_set"))
         _apply_state(STATE.a_scan, _load_json(STATE.project.fs.a_scan_state()))
         _apply_state(STATE.mu_s, _load_json(STATE.project.fs.mu_s_state()))
         _apply_state(STATE.boundaries, _load_json(STATE.project.fs.boundaries_state()))
