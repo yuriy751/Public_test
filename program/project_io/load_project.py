@@ -75,6 +75,30 @@ def _apply_project_state(data: dict) -> None:
         STATE.project.modified = bool(data["modified"])
 
 
+def _normalize_image_items_paths(image_items: list, base_folder: Path) -> None:
+    """
+    Нормализует пути в image_items после загрузки проекта:
+    старые абсолютные пути из другой машины/папки заменяются на
+    пути внутри распакованного проекта.
+    """
+    if not isinstance(image_items, list):
+        return
+
+    for item in image_items:
+        if not isinstance(item, dict):
+            continue
+        raw_path = item.get("path")
+        if not raw_path:
+            continue
+
+        filename = Path(str(raw_path)).name
+        if not filename:
+            continue
+
+        candidate = base_folder / filename
+        item["path"] = str(candidate)
+
+
 def _restore_image_bundle(folder: Path) -> None:
     bundle = folder / "images_bundle.npz"
     if not bundle.exists():
@@ -142,6 +166,8 @@ def open_project(sender, app_data, user_data) -> None:
         _apply_state(STATE.gallery_proc, _load_json(STATE.project.fs.gallery_proc_state()))
         _restore_set_fields(STATE.gallery, ("selected_indices",))
         _restore_set_fields(STATE.gallery_proc, ("selected_indices", "final_boundaries_set"))
+        _normalize_image_items_paths(STATE.gallery.image_items, STATE.project.fs.images_for_processing())
+        _normalize_image_items_paths(STATE.gallery_proc.image_items, STATE.project.fs.images_with_boundaries())
         _apply_state(STATE.a_scan, _load_json(STATE.project.fs.a_scan_state()))
         _apply_state(STATE.mu_s, _load_json(STATE.project.fs.mu_s_state()))
         _apply_state(STATE.boundaries, _load_json(STATE.project.fs.boundaries_state()))
