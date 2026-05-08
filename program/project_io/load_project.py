@@ -12,7 +12,18 @@ from ..tags import TAGS
 from ..project_io.project_fs import ProjectFS
 from ..project_io.tables_io import load_tables
 from ..ui_adapters.input_fields import apply_input_fields
-from ..project_io.new_project import new_project_call_back
+from ..project_io.new_project import (
+    state_update,
+    input_fields_update,
+    sliders_update,
+    button_disabled_update,
+    checkboxes_update,
+    text_fields_update,
+    tables_update,
+    galleries_update,
+    graphics_update,
+    windows_update,
+)
 from ..Table_processing import process_table_data
 from ..Mu_s_Core_Calculations import update_mu_s_table_gui
 from ..Average_intensity_calculation import update_av_int_table_gui
@@ -21,6 +32,7 @@ from ..Gallery_proc import layout_boundaries_gallery
 from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import load_images_mu_s
 from ..interface_functions.resize import resize_gui
+from ..state.Global_paths_changing import project_modified_function_false
 
 
 def show_open_project_dialog() -> None:
@@ -133,6 +145,64 @@ def _restore_image_bundle(folder: Path) -> None:
             print(f"[OPEN][WARN] Failed to restore '{img_name}': {e}")
 
 
+def _safe_drawlist_cleanup() -> None:
+    known_drawlists = (
+        TAGS.drawlists.boundary,
+        TAGS.drawlists.roi,
+        TAGS.drawlists.mu_s,
+        TAGS.drawlists.mu_s_images,
+    )
+    missing_tags: list[str] = []
+
+    for tag in known_drawlists:
+        if not dpg.does_item_exist(tag):
+            missing_tags.append(tag)
+            continue
+        try:
+            dpg.delete_item(tag, children_only=True)
+        except Exception as e:
+            print(f"[OPEN][WARN] Drawlist cleanup warning for '{tag}': {e}")
+
+    if missing_tags:
+        print(f"[OPEN][WARN] Drawlist tags not found during recovery: {missing_tags}")
+
+
+def _recover_ui_after_open_error(selected_path: Path, open_error: Exception) -> None:
+    print(f"[OPEN][ERROR] Failed to open project '{selected_path}': {open_error}")
+
+    recovery_steps = (
+        ("state reset", state_update),
+        ("input controls reset", lambda: (
+            input_fields_update(),
+            sliders_update(),
+            button_disabled_update(),
+            checkboxes_update(),
+            text_fields_update(),
+        )),
+        ("tables reset", tables_update),
+        ("galleries reset", galleries_update),
+        ("drawlists cleanup", _safe_drawlist_cleanup),
+        ("draw/plot reset", graphics_update),
+        ("windows reset", windows_update),
+        ("project flags reset", lambda: (
+            dpg.set_viewport_title("New File"),
+            project_modified_function_false(STATE.project, "New File"),
+        )),
+    )
+
+    recovery_errors: list[str] = []
+    for step_name, step_fn in recovery_steps:
+        try:
+            step_fn()
+        except Exception as e:
+            recovery_errors.append(f"{step_name}: {e}")
+
+    if recovery_errors:
+        print("[OPEN][ERROR] Recovery encountered errors:")
+        for error_text in recovery_errors:
+            print(f"[OPEN][ERROR]   - {error_text}")
+
+
 def open_project(sender, app_data, user_data) -> None:
     if not app_data:
         return
@@ -145,7 +215,20 @@ def open_project(sender, app_data, user_data) -> None:
             shutil.rmtree(extract_dir)
         extract_dir.mkdir(parents=True, exist_ok=True)
 
-        new_project_call_back()
+        # Предварительно очищаем рабочее состояние перед загрузкой архива.
+        # Здесь ожидается "чистый" путь без деградации.
+        state_update()
+        input_fields_update()
+        sliders_update()
+        button_disabled_update()
+        checkboxes_update()
+        text_fields_update()
+        tables_update()
+        galleries_update()
+        graphics_update()
+        windows_update()
+        dpg.set_viewport_title("New File")
+        project_modified_function_false(STATE.project, "New File")
 
         with ZipFile(selected_path, "r") as zipf:
             zipf.extractall(extract_dir)
@@ -211,10 +294,4 @@ def open_project(sender, app_data, user_data) -> None:
         # Заголовок окна должен соответствовать открытому файлу проекта.
         dpg.set_viewport_title(selected_path.name)
     except Exception as e:
-        print(f"[OPEN][ERROR] Failed to open project '{selected_path}': {e}")
-        # Возвращаем UI в консистентное «пустое» состояние вместо частично
-        # инициализированного интерфейса.
-        try:
-            new_project_call_back()
-        except Exception as reset_error:
-            print(f"[OPEN][ERROR] Failed to recover UI after open error: {reset_error}")
+        _recover_ui_after_open_error(selected_path, e)
