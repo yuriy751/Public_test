@@ -391,10 +391,13 @@ def delete_images():
     # Если данных в отображениях не осталось — показываем чёрные заглушки,
     # чтобы не оставались старые кадры в drawlist.
     if not STATE.gallery.images:
-        _set_black_drawlist_placeholder(TAGS.drawlists.imaging)
-        _set_black_drawlist_placeholder(TAGS.drawlists.roi)
+        roi_drawlist_tag = getattr(TAGS.drawlists, "roi", None)
+        if roi_drawlist_tag:
+            _set_black_drawlist_placeholder(roi_drawlist_tag)
     if not STATE.boundaries.images:
-        _set_black_drawlist_placeholder(TAGS.drawlists.boundary)
+        boundary_drawlist_tag = getattr(TAGS.drawlists, "boundary", None)
+        if boundary_drawlist_tag:
+            _set_black_drawlist_placeholder(boundary_drawlist_tag)
     if not STATE.mu_s.images and dpg.does_item_exist(TAGS.textures.mu_s):
         clear_dynamic_texture(
             TAGS.textures.mu_s,

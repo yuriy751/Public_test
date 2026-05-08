@@ -114,9 +114,13 @@ def galleries_update():
 
     # При «Новый проект» явно обнуляем drawlists чёрными заглушками,
     # чтобы не оставались старые кадры.
-    _set_black_drawlist_placeholder(TAGS.drawlists.imaging)
-    _set_black_drawlist_placeholder(TAGS.drawlists.roi)
-    _set_black_drawlist_placeholder(TAGS.drawlists.boundary)
+    roi_drawlist_tag = getattr(TAGS.drawlists, "roi", None)
+    boundary_drawlist_tag = getattr(TAGS.drawlists, "boundary", None)
+
+    if roi_drawlist_tag:
+        _set_black_drawlist_placeholder(roi_drawlist_tag)
+    if boundary_drawlist_tag:
+        _set_black_drawlist_placeholder(boundary_drawlist_tag)
 
 
 def graphics_update():
