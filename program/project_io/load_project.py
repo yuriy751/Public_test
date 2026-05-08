@@ -21,6 +21,10 @@ from ..Gallery_proc import layout_boundaries_gallery
 from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import load_images_mu_s
 from ..interface_functions.resize import resize_gui
+from ..tags.validation import (
+    REQUIRED_TAGS_FOR_OPEN_PROJECT_FLOW,
+    validate_required_tags,
+)
 
 
 def show_open_project_dialog() -> None:
@@ -134,6 +138,13 @@ def _restore_image_bundle(folder: Path) -> None:
 
 
 def open_project(sender, app_data, user_data) -> None:
+    missing_tags = validate_required_tags(REQUIRED_TAGS_FOR_OPEN_PROJECT_FLOW)
+    if missing_tags:
+        print("[OPEN][ERROR] Missing required tags:")
+        for missing in missing_tags:
+            print(f"  - {missing}")
+        return
+
     if not app_data:
         return
 
@@ -212,9 +223,6 @@ def open_project(sender, app_data, user_data) -> None:
         dpg.set_viewport_title(selected_path.name)
     except Exception as e:
         print(f"[OPEN][ERROR] Failed to open project '{selected_path}': {e}")
-        # Возвращаем UI в консистентное «пустое» состояние вместо частично
-        # инициализированного интерфейса.
-        try:
-            new_project_call_back()
-        except Exception as reset_error:
-            print(f"[OPEN][ERROR] Failed to recover UI after open error: {reset_error}")
+        # Возвращаем UI в консистентное «пустое» состояние;
+        # ошибки восстановления не должны провоцировать вторичное падение.
+        new_project_call_back()
