@@ -17,6 +17,16 @@ from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import clear_dynamic_texture, load_images_mu_s
 
 
+
+
+def _set_black_drawlist_placeholder(drawlist_tag: str) -> None:
+    if not dpg.does_item_exist(drawlist_tag):
+        return
+    w = max(1, dpg.get_item_width(drawlist_tag))
+    h = max(1, dpg.get_item_height(drawlist_tag))
+    dpg.delete_item(drawlist_tag, children_only=True)
+    dpg.draw_rectangle([0, 0], [w, h], fill=(0, 0, 0, 255), color=(0, 0, 0, 255), parent=drawlist_tag)
+
 def _set_table_template(table_tag: str, headers: list[str]) -> None:
     """
     Создаёт шаблон таблицы (колонки + одна пустая строка),
@@ -101,6 +111,12 @@ def galleries_update():
                           dpg.get_item_width(TAGS.textures.mu_s),
                           dpg.get_item_height(TAGS.textures.mu_s))
     load_images_mu_s()
+
+    # При «Новый проект» явно обнуляем drawlists чёрными заглушками,
+    # чтобы не оставались старые кадры.
+    _set_black_drawlist_placeholder(TAGS.drawlists.imaging)
+    _set_black_drawlist_placeholder(TAGS.drawlists.roi)
+    _set_black_drawlist_placeholder(TAGS.drawlists.boundary)
 
 
 def graphics_update():

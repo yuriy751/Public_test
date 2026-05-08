@@ -20,6 +20,7 @@ from ..Gallery import layout_gallery, update_boundary_texture
 from ..Gallery_proc import layout_boundaries_gallery
 from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import load_images_mu_s
+from ..interface_functions.resize import resize_gui
 
 
 def show_open_project_dialog() -> None:
@@ -197,6 +198,7 @@ def open_project(sender, app_data, user_data) -> None:
         layout_boundaries_gallery()
         load_images_for_boundaries()
         load_images_mu_s()
+        resize_gui()
 
         STATE.settings.last_open_folder = str(project_dir)
         STATE.settings.save()
