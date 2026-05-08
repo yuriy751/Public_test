@@ -15,12 +15,15 @@ from ..Mu_s_Core_Calculations import update_mu_s_table_gui
 from ..Average_intensity_calculation import update_av_int_table_gui
 from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import clear_dynamic_texture, load_images_mu_s
-
-
+from ..tags.validation import (
+    REQUIRED_TAGS_FOR_NEW_PROJECT_FLOW,
+    validate_required_tags,
+)
 
 
 def _set_black_drawlist_placeholder(drawlist_tag: str) -> None:
     if not dpg.does_item_exist(drawlist_tag):
+        print(f"[NEW_PROJECT][WARN] Drawlist tag does not exist: {drawlist_tag}")
         return
     w = max(1, dpg.get_item_width(drawlist_tag))
     h = max(1, dpg.get_item_height(drawlist_tag))
@@ -153,6 +156,14 @@ def text_fields_update():
 
 
 def new_project_call_back():
+    missing_tags = validate_required_tags(REQUIRED_TAGS_FOR_NEW_PROJECT_FLOW)
+    if missing_tags:
+        print("[NEW_PROJECT][ERROR] Missing required tags:")
+        for missing in missing_tags:
+            print(f"  - {missing}")
+        dpg.set_viewport_title('New File')
+        return
+
     # Сбрасываем title сразу, чтобы при ранних ошибках не оставался временный/неверный заголовок.
     dpg.set_viewport_title('New File')
     state_update()
