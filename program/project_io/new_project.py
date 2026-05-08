@@ -27,6 +27,22 @@ def _set_black_drawlist_placeholder(drawlist_tag: str) -> None:
     dpg.delete_item(drawlist_tag, children_only=True)
     dpg.draw_rectangle([0, 0], [w, h], fill=(0, 0, 0, 255), color=(0, 0, 0, 255), parent=drawlist_tag)
 
+
+def _get_existing_drawlist_tags(*names: str) -> list[str]:
+    """
+    Возвращает список тегов drawlist только для реально существующих
+    атрибутов в TAGS.drawlists. Это защищает от AttributeError при
+    неполной/устаревшей конфигурации тегов.
+    """
+    tags: list[str] = []
+    for name in names:
+        tag = getattr(TAGS.drawlists, name, None)
+        if tag:
+            tags.append(tag)
+        else:
+            print(f"[NEW][WARN] Drawlist tag attribute is missing: TAGS.drawlists.{name}")
+    return tags
+
 def _set_table_template(table_tag: str, headers: list[str]) -> None:
     """
     Создаёт шаблон таблицы (колонки + одна пустая строка),
@@ -114,13 +130,8 @@ def galleries_update():
 
     # При «Новый проект» явно обнуляем drawlists чёрными заглушками,
     # чтобы не оставались старые кадры.
-    roi_drawlist_tag = getattr(TAGS.drawlists, "roi", None)
-    boundary_drawlist_tag = getattr(TAGS.drawlists, "boundary", None)
-
-    if roi_drawlist_tag:
-        _set_black_drawlist_placeholder(roi_drawlist_tag)
-    if boundary_drawlist_tag:
-        _set_black_drawlist_placeholder(boundary_drawlist_tag)
+    for drawlist_tag in _get_existing_drawlist_tags("roi", "boundary", "mu_s", "mu_s_images"):
+        _set_black_drawlist_placeholder(drawlist_tag)
 
 
 def graphics_update():

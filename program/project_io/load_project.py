@@ -35,6 +35,21 @@ from ..interface_functions.resize import resize_gui
 from ..state.Global_paths_changing import project_modified_function_false
 
 
+def _get_existing_drawlist_tags(*names: str) -> tuple[str, ...]:
+    """
+    Безопасно получает drawlist-теги по именам атрибутов.
+    Пропускает отсутствующие атрибуты и пишет предупреждение в лог.
+    """
+    tags: list[str] = []
+    for name in names:
+        tag = getattr(TAGS.drawlists, name, None)
+        if tag:
+            tags.append(tag)
+        else:
+            print(f"[OPEN][WARN] Drawlist tag attribute is missing: TAGS.drawlists.{name}")
+    return tuple(tags)
+
+
 def show_open_project_dialog() -> None:
     """
     Показывает диалог открытия проекта, предварительно синхронизируя
@@ -146,12 +161,7 @@ def _restore_image_bundle(folder: Path) -> None:
 
 
 def _safe_drawlist_cleanup() -> None:
-    known_drawlists = (
-        TAGS.drawlists.boundary,
-        TAGS.drawlists.roi,
-        TAGS.drawlists.mu_s,
-        TAGS.drawlists.mu_s_images,
-    )
+    known_drawlists = _get_existing_drawlist_tags("boundary", "roi", "mu_s", "mu_s_images")
     missing_tags: list[str] = []
 
     for tag in known_drawlists:
