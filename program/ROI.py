@@ -11,7 +11,9 @@ def update_roi_lines(sender=None, app_data=None, user_data=None):
     if not dpg.does_item_exist(TAGS.drawlists.roi):
         return
     dpg.delete_item(TAGS.drawlists.roi, children_only=True)
-    scale = STATE.scale.scale * STATE.scale.window_scale
+    base_scale = STATE.scale.scale if STATE.scale.scale is not None else 1.0
+    window_scale = STATE.scale.window_scale if STATE.scale.window_scale is not None else 1.0
+    scale = base_scale * window_scale
     width = dpg.get_item_width(TAGS.child_windows.imaging)
     height = dpg.get_item_height(TAGS.child_windows.imaging)
 

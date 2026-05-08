@@ -17,11 +17,54 @@ from ..Boundaries_images_gallery import load_images_for_boundaries
 from ..Mu_s_focus_imaging import clear_dynamic_texture, load_images_mu_s
 
 
+
+
+def _set_black_drawlist_placeholder(drawlist_tag: str) -> None:
+    if not dpg.does_item_exist(drawlist_tag):
+        return
+    w = max(1, dpg.get_item_width(drawlist_tag))
+    h = max(1, dpg.get_item_height(drawlist_tag))
+    dpg.delete_item(drawlist_tag, children_only=True)
+    dpg.draw_rectangle([0, 0], [w, h], fill=(0, 0, 0, 255), color=(0, 0, 0, 255), parent=drawlist_tag)
+
+
+def _get_existing_drawlist_tags(*names: str) -> list[str]:
+    """
+    Возвращает список тегов drawlist только для реально существующих
+    атрибутов в TAGS.drawlists. Это защищает от AttributeError при
+    неполной/устаревшей конфигурации тегов.
+    """
+    tags: list[str] = []
+    for name in names:
+        tag = getattr(TAGS.drawlists, name, None)
+        if tag:
+            tags.append(tag)
+        else:
+            print(f"[NEW][WARN] Drawlist tag attribute is missing: TAGS.drawlists.{name}")
+    return tags
+
+def _set_table_template(table_tag: str, headers: list[str]) -> None:
+    """
+    Создаёт шаблон таблицы (колонки + одна пустая строка),
+    чтобы layout интерфейса не «прыгал» при очистке данных.
+    """
+    if not dpg.does_item_exist(table_tag):
+        return
+
+    dpg.delete_item(table_tag, children_only=True)
+    for header in headers:
+        dpg.add_table_column(label=header, parent=table_tag)
+
+    with dpg.table_row(parent=table_tag):
+        for _ in headers:
+            dpg.add_text("-")
+
+
 def input_fields_update():
     tags_dict = TAGS.inputs.__dict__
     default_values_dict = INPUT_DEFAULTS.__dict__
     for key, tag in tags_dict.items():
-        if default_values_dict.get(key) and dpg.does_item_exist(tag):
+        if key in default_values_dict and dpg.does_item_exist(tag):
             dpg.set_value(tag, default_values_dict[key])
 
 
@@ -38,23 +81,34 @@ def button_disabled_update():
                  TAGS.buttons.images_process, TAGS.buttons.image_upload, TAGS.buttons.images_delete,
                  TAGS.buttons.plot_processing, TAGS.buttons.show_boundary_image)
     for tag in tags_dict:
-        dpg.disable_item(tag)
+        if tag and dpg.does_item_exist(tag):
+            dpg.disable_item(tag)
 
 
 def tables_update():
-    table_tag = TAGS.tables.boundaries
-    if dpg.does_item_exist(table_tag):
-        dpg.delete_item(table_tag, children_only=True)
     if STATE.tables.boundaries:
         process_table_data()  # корректно пересоберёт таблицу
     else:
-        print("[Delete] Boundaries table cleared.")
+        _set_table_template(
+            TAGS.tables.boundaries,
+            ["N", "Med Pixel Pos", "Min Pixel Pos", "Max Pixel Pos", "Med Distance", "Min Distance", "Max Distance"]
+        )
 
     # Mu_s
     update_mu_s_table_gui()
+    if not STATE.tables.mu_s:
+        _set_table_template(
+            TAGS.tables.mu_s,
+            ["N", "mu_s 1/mm", "mu_s (std) 1/mm"]
+        )
 
     # Average Intensity
     update_av_int_table_gui()
+    if not STATE.tables.av_int:
+        _set_table_template(
+            TAGS.tables.av_int,
+            ["N", "Av int (med), pixel value", "Av int (std), pixel value"]
+        )
 
 
 def state_update():
@@ -73,6 +127,11 @@ def galleries_update():
                           dpg.get_item_width(TAGS.textures.mu_s),
                           dpg.get_item_height(TAGS.textures.mu_s))
     load_images_mu_s()
+
+    # При «Новый проект» явно обнуляем drawlists чёрными заглушками,
+    # чтобы не оставались старые кадры.
+    for drawlist_tag in _get_existing_drawlist_tags("roi", "boundary", "mu_s", "mu_s_images"):
+        _set_black_drawlist_placeholder(drawlist_tag)
 
 
 def graphics_update():
@@ -109,6 +168,9 @@ def text_fields_update():
 
 
 def new_project_call_back():
+    # Сбрасываем title сразу, чтобы при ранних ошибках не оставался временный/неверный заголовок.
+    dpg.set_viewport_title('New File')
+    state_update()
     update_roi_lines()
     input_fields_update()
     sliders_update()
@@ -116,7 +178,6 @@ def new_project_call_back():
     checkboxes_update()
     text_fields_update()
     tables_update()
-    state_update()
     galleries_update()
     graphics_update()
     windows_update()
